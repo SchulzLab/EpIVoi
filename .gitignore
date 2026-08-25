@@ -1,0 +1,41 @@
+# R
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+renv/library/
+renv/staging/
+
+# macOS
+.DS_Store
+
+# Large biological data
+*.rds
+*.RDS
+*.fa
+*.fasta
+*.fai
+*.bed
+*.bedGraph
+*.bw
+*.bigWig
+*.gz
+
+# Generated EpIVoi files
+shap_bw/
+fimo/
+tf_pastaa_app_files/
+results/
+tmp/
+
+# PASTAA / FIMO output
+*_Affinity.txt
+*_Affinity_patched.txt
+*_pastaa_raw.txt
+*_pastaa_sorted.txt
+*_ranked_regions.txt
+fimo.tsv
+fimo.txt
+
+# Logs
+*.log
