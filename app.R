@@ -613,6 +613,23 @@ gtf_df <- get_gtf_df(viz_obj)
 genome_version <- get_genome_version(viz_obj)
 species_name <- get_species(viz_obj)
 species_resources <- get_species_resources(species_name, genome_version)
+ensembl_to_symbol <- gtf_df |>
+  dplyr::transmute(
+    gene_id = strip_ensembl_version(as.character(gene_id)),
+    gene_symbol = as.character(gene_name)
+  ) |>
+  dplyr::filter(
+    !is.na(gene_id),
+    nzchar(gene_id),
+    !is.na(gene_symbol),
+    nzchar(gene_symbol)
+  ) |>
+  dplyr::distinct(gene_id, .keep_all = TRUE)
+
+ensembl_to_symbol_map <- stats::setNames(
+  ensembl_to_symbol$gene_symbol,
+  ensembl_to_symbol$gene_id
+)
 
 # ===== NEW SHAP / ATAC on-disk object structure =============================
 
@@ -920,11 +937,7 @@ ct_to_file <- function(ct) make_safe_id(ct)
 
 regulatory_build_bed <- Sys.getenv(
   "EPIVOI_REGULATORY_BUILD_BED",
-  unset = file.path(
-    app_dir,
-    "local_files",
-    "ensembl_regulatory_build_hg38.bed"
-  )
+  unset = ""
 )
 # ===== PASTAA / TRAP locations ==============================================
 
@@ -1027,8 +1040,8 @@ external_files_to_check <- c(
   "PASTAA energy matrix" = pastaa_energy_matrix,
   "Genome FASTA" = pastaa_hg38_fa,
   "MEME motif file" = MEME_MOTIF_FILE,
-  "FIMO ENCODE background" = FIMO_ENCODE_BG,
-  "Regulatory build BED" = regulatory_build_bed
+  "FIMO ENCODE background" = FIMO_ENCODE_BG
+  
 )
 
 for (resource_name in names(external_files_to_check)) {
@@ -1388,6 +1401,14 @@ ui <- tagList(
           br(),
           br(),
           h4("Performance table"),
+
+          textInput(
+            "overview_gene_search",
+            "Search gene:",
+            value = "",
+            placeholder = "Gene symbol or Ensembl ID, e.g. ABHD5 or ENSG..."
+          ),
+
           download_buttons_ui("overview", "Download Performance"),
           DTOutput("genes_table")
         )
@@ -1637,7 +1658,7 @@ ui <- tagList(
             "PASTAA run mode:",
             choices = c(
               "Run per gene" = "gene",
-              "Run per cell type" = "celltype"
+              "Run per biological group" = "celltype"
             ),
             selected = "gene"
           ),
@@ -1668,9 +1689,9 @@ ui <- tagList(
             condition = "input.pastaa_run_mode == 'celltype'",
             tags$div(
               class = "well",
-              tags$strong("Cell-type-level analysis across genes"),
+              tags$strong("Biological-group-level analysis across genes"),
               tags$p(
-                "No gene is selected. For cell-type-level analysis, raw Feature Importance values are converted to within-gene z-scores before regions are pooled across genes. The pooled regions are then ranked, deduplicated, and limited to the selected number of top regions."
+                "No gene is selected. For biological-group-level analysis, raw Feature Importance values are converted to within-gene z-scores before regions are pooled across genes. The pooled regions are then ranked, deduplicated, and limited to the selected number of top regions."
               ),
               checkboxInput(
                 "pastaa_filter_performance",
@@ -1699,7 +1720,7 @@ ui <- tagList(
 
           selectizeInput(
             "pastaa_celltypes",
-            "Select Cell Types:",
+            "Select biological groups:",
             choices = NULL,
             selected = NULL,
             multiple = TRUE,
@@ -1818,7 +1839,7 @@ ui <- tagList(
         h3("Reproducibility code"),
 
         p(
-          "This code reproduces the current EpIVoi analysis settings and the main analysis steps outside the GUI, including raw Feature Importance loading, cell-type-level z-score calculation, region ranking, BED/FASTA preparation, TRAP, PASTAA, and BH-FDR correction."
+          "This code reproduces the current EpIVoi analysis settings and the main analysis steps outside the GUI, including raw Feature Importance loading, biological-group-level z-score calculation, region ranking, BED/FASTA preparation, TRAP, PASTAA, and BH-FDR correction."
         ),
   
 
@@ -1973,8 +1994,8 @@ ui <- tagList(
             " PASTAA uses regions associated with the selected gene."
           ),
           tags$li(
-            strong("Run per cell type:"),
-            " no gene is selected. PASTAA pools Feature Importance regions across genes for each selected cell type. Optionally, genes can first be filtered using their selected test-correlation metric."
+            strong("Run per biological group:"),
+            " no gene is selected. PASTAA pools Feature Importance regions across genes for each selected biological group. Optionally, genes can first be filtered using their selected test-correlation metric."
           ),
           tags$li(
             strong("Positive:"),
@@ -2908,12 +2929,13 @@ server <- function(input, output, session) {
 
     df_plot <- df_all |>
       dplyr::filter(
-        is.finite(suppressWarnings(as.numeric(.data[[metric]])))
+        is.finite(suppressWarnings(as.numeric(.data[[metric]]))),
+        corr_class != "failed"
       )
 
     failed_n <- sum(df_all$corr_class == "failed", na.rm = TRUE)
 
-    ggplot(
+    p <- ggplot(
       df_plot,
       aes(
         x = corr_class,
@@ -2933,24 +2955,40 @@ server <- function(input, output, session) {
         values = corr_colors_active(),
         drop = FALSE
       ) +
-      annotate(
-        "text",
-        x = "failed",
-        y = -Inf,
-        label = paste0("n = ", failed_n, "\n(no finite values)"),
-        vjust = -0.5
-      ) +
       labs(
         x = paste("Class based on", input$corr_metric_for_class),
         y = metric,
-        title = paste(
-          "Distribution of",
-          metric,
-          "by correlation class"
-        ),
+        title = paste("Distribution of", metric, "by correlation class"),
         fill = "Correlation class"
       ) +
       theme_bw(base_size = 14)
+
+    if (failed_n > 0) {
+      y_min <- min(df_plot[[metric]], na.rm = TRUE)
+
+      p <- p +
+        geom_point(
+          data = data.frame(
+            corr_class = factor("failed", levels = corr_levels),
+            plot_value = y_min
+          ),
+          aes(
+            x = corr_class,
+            y = plot_value
+          ),
+          inherit.aes = FALSE,
+          size = 3
+        ) +
+        annotate(
+          "text",
+          x = "failed",
+          y = y_min,
+          label = paste0("n = ", failed_n),
+          vjust = -1
+        )
+    }
+
+    p
   }
 
 
@@ -3031,12 +3069,40 @@ server <- function(input, output, session) {
   )
 
   output$genes_table <- renderDT({
+
+    df <- overview_table_all()
+
+    search_value <- trimws(input$overview_gene_search %||% "")
+
+    if (nzchar(search_value)) {
+
+      search_clean <- strip_ensembl_version(search_value)
+      search_upper <- toupper(search_value)
+
+      # If the user entered an Ensembl gene ID, resolve it to the gene symbol.
+      resolved_symbol <- if (search_clean %in% names(ensembl_to_symbol_map)) {
+        unname(ensembl_to_symbol_map[[search_clean]])
+      } else {
+        search_value
+      }
+
+      df <- df |>
+        dplyr::filter(
+          grepl(
+            toupper(resolved_symbol),
+            toupper(as.character(gene_symbol)),
+            fixed = TRUE
+          )
+        )
+    }
+
     datatable(
-      overview_table_all(),
+      df,
       options = list(
         pageLength = 20,
         scrollX = TRUE,
-        ordering = TRUE
+        ordering = TRUE,
+        dom = "ltip"
       ),
       rownames = FALSE
     )
@@ -4287,7 +4353,6 @@ server <- function(input, output, session) {
 
       run_id <- paste(
         gene_safe,
-        run_mode,
         direction,
         paste0("n", n_regions),
         sep = "_"
@@ -4297,7 +4362,6 @@ server <- function(input, output, session) {
 
       run_id_parts <- c(
         ct_safe,
-        run_mode,
         direction,
         paste0("n", n_regions)
       )
@@ -4305,10 +4369,14 @@ server <- function(input, output, session) {
       if (isTRUE(filter_performance)) {
         run_id_parts <- c(
           run_id_parts,
-          metric_safe,
           corr_safe
         )
       }
+
+      run_id <- paste(
+        run_id_parts,
+        collapse = "_"
+      )
 
       run_id <- paste(
         run_id_parts,
@@ -4466,8 +4534,8 @@ server <- function(input, output, session) {
       "optimal_targets_in_tissue",
       "optimal_genes_in_tissue",
       "optimal_all_targets",
-      "n_regions",
-      "n_annotated"
+      "num_genes",
+      "num_user_genes"
     )[seq_len(min(ncol(res), 7))]
 
     gene_label_for_result <- if (run_mode == "celltype") "ALL_GENES" else gene
@@ -4489,8 +4557,11 @@ server <- function(input, output, session) {
         TF,
         p_value,
         BH_FDR,
-        n_regions,
-        n_annotated
+        optimal_targets_in_tissue,
+        optimal_genes_in_tissue,
+        optimal_all_targets,
+        num_genes,
+        num_user_genes
       )
 
     list(
@@ -6854,8 +6925,8 @@ server <- function(input, output, session) {
         "optimal_targets_in_tissue",
         "optimal_genes_in_tissue",
         "optimal_all_targets",
-        "n_regions",
-        "n_annotated"
+        "num_genes",
+        "num_user_genes"
       )[
         seq_len(min(ncol(result), 7))
       ]
@@ -8111,114 +8182,179 @@ server <- function(input, output, session) {
     dataset
   }
 
-  load_regulatory_build_from_biomart <- function() {
-    if (!requireNamespace("biomaRt", quietly = TRUE)) {
-      status_msg("biomaRt is not installed. Regulatory build can only be loaded from local BED.")
-      return(data.frame())
-    }
+  load_regulatory_build_from_ensembl_ftp <- function() {
 
-    dataset <- find_regulatory_dataset(species_name)
+    ensembl_release <- 116L
 
-    if (is.null(dataset) || !nzchar(dataset)) {
-      return(data.frame())
-    }
+    species_slug <- tolower(gsub(" ", "_", species_name))
+
+    assembly <- dplyr::case_when(
+      genome_version == "hg38" ~ "GRCh38",
+      genome_version == "hg19" ~ "GRCh37",
+      genome_version == "mm39" ~ "GRCm39",
+      genome_version == "mm10" ~ "GRCm38",
+      genome_version == "danRer11" ~ "GRCz11",
+      TRUE ~ genome_version
+    )
+
+    species_file <- paste0(
+      toupper(substr(species_slug, 1, 1)),
+      substr(species_slug, 2, nchar(species_slug))
+    )
+
+    ftp_url <- paste0(
+      "https://ftp.ensembl.org/pub/release-",
+      ensembl_release,
+      "/regulation/",
+      species_slug,
+      "/",
+      assembly,
+      "/annotation/",
+      species_file,
+      ".",
+      assembly,
+      ".regulatory_features.v",
+      ensembl_release,
+      ".gff3.gz"
+    )
 
     status_msg(
       paste0(
-        "Loading regulatory build from BioMart for ",
+        "Loading Ensembl regulatory annotation for ",
         species_name,
-        "..."
+        " (",
+        assembly,
+        ")..."
       )
     )
 
-    mart <- tryCatch(
-      biomaRt::useEnsembl(
-        biomart = "regulation",
-        dataset = dataset
+    message("[REGULATORY] Ensembl FTP URL: ", ftp_url)
+
+    cache_dir <- file.path(
+      tempdir(),
+      "epivoi_regulatory_cache"
+    )
+
+    dir.create(
+      cache_dir,
+      recursive = TRUE,
+      showWarnings = FALSE
+    )
+
+    cache_file <- file.path(
+      cache_dir,
+      paste0(
+        species_slug,
+        "_",
+        assembly,
+        "_regulatory_features_v",
+        ensembl_release,
+        ".gff3.gz"
+      )
+    )
+
+    if (!file.exists(cache_file)) {
+
+      download_ok <- tryCatch(
+        {
+          utils::download.file(
+            url = ftp_url,
+            destfile = cache_file,
+            mode = "wb",
+            quiet = TRUE
+          )
+          TRUE
+        },
+        error = function(e) {
+          status_msg(
+            paste(
+              "Could not download Ensembl regulatory annotation:",
+              e$message
+            )
+          )
+          FALSE
+        }
+      )
+
+      if (!isTRUE(download_ok)) {
+        if (file.exists(cache_file)) {
+          unlink(cache_file)
+        }
+        return(data.frame())
+      }
+    }
+
+    reg_raw <- tryCatch(
+      utils::read.delim(
+        gzfile(cache_file),
+        header = FALSE,
+        sep = "\t",
+        comment.char = "#",
+        quote = "",
+        stringsAsFactors = FALSE
       ),
       error = function(e) {
-        status_msg(paste("Could not connect to Ensembl Regulation BioMart:", e$message))
-        NULL
-      }
-    )
-
-    if (is.null(mart)) {
-      return(data.frame())
-    }
-
-    attrs <- tryCatch(
-      biomaRt::listAttributes(mart),
-      error = function(e) {
-        status_msg(paste("Could not list BioMart attributes:", e$message))
-        data.frame()
-      }
-    )
-
-    if (nrow(attrs) == 0) {
-      return(data.frame())
-    }
-
-    pick_attr <- function(candidates) {
-      out <- candidates[candidates %in% attrs$name][1]
-      if (length(out) == 0) NA_character_ else out
-    }
-
-    chrom_attr <- pick_attr(c("chromosome_name", "seq_region_name"))
-    start_attr <- pick_attr(c("chromosome_start", "start"))
-    end_attr <- pick_attr(c("chromosome_end", "end"))
-    type_attr <- pick_attr(c(
-      "feature_type_name",
-      "regulatory_feature_type_name",
-      "regulatory_feature_type",
-      "feature_type"
-    ))
-
-    if (is.na(chrom_attr) || is.na(start_attr) || is.na(end_attr)) {
-      status_msg("BioMart regulatory dataset does not contain expected coordinate attributes.")
-      return(data.frame())
-    }
-
-    selected_attrs <- c(chrom_attr, start_attr, end_attr)
-
-    if (!is.na(type_attr)) {
-      selected_attrs <- c(selected_attrs, type_attr)
-    }
-
-    reg <- tryCatch(
-      biomaRt::getBM(
-        attributes = selected_attrs,
-        mart = mart
-      ),
-      error = function(e) {
-        status_msg(paste("Could not download regulatory build from BioMart:", e$message))
-        data.frame()
-      }
-    )
-
-    if (nrow(reg) == 0) {
-      status_msg("BioMart returned no regulatory regions.")
-      return(data.frame())
-    }
-
-    reg <- normalise_regulatory_build_df(reg)
-
-    if (nrow(reg) > 0) {
-      reg <- reg |>
-        dplyr::mutate(
-          start = start - 1L
-        ) |>
-        dplyr::filter(
-          start >= 0,
-          end > start
+        status_msg(
+          paste(
+            "Could not read Ensembl regulatory GFF3:",
+            e$message
+          )
         )
+        data.frame()
+      }
+    )
+
+    if (nrow(reg_raw) == 0 || ncol(reg_raw) < 5) {
+      status_msg(
+        "Ensembl regulatory GFF3 contains no usable regions."
+      )
+      return(data.frame())
     }
+
+    reg <- data.frame(
+      chrom = as.character(reg_raw[[1]]),
+      start = suppressWarnings(
+        as.integer(reg_raw[[4]]) - 1L
+      ),
+      end = suppressWarnings(
+        as.integer(reg_raw[[5]])
+      ),
+      name = as.character(reg_raw[[3]]),
+      stringsAsFactors = FALSE
+    )
+
+    reg$chrom <- ifelse(
+      grepl("^chr", reg$chrom, ignore.case = TRUE),
+      reg$chrom,
+      paste0("chr", reg$chrom)
+    )
+
+    reg <- reg |>
+      dplyr::filter(
+        !is.na(start),
+        !is.na(end),
+        start >= 0,
+        end > start
+      ) |>
+      dplyr::distinct(
+        chrom,
+        start,
+        end,
+        name
+      )
 
     status_msg(
       paste0(
-        "Regulatory build loaded from BioMart and cached for this session: ",
+        "Ensembl regulatory annotation loaded and cached: ",
         nrow(reg),
         " regions."
       )
+    )
+
+    message(
+      "[REGULATORY] Loaded from Ensembl FTP: ",
+      nrow(reg),
+      " regions"
     )
 
     reg
@@ -8240,7 +8376,7 @@ server <- function(input, output, session) {
 
     reg <- data.frame()
 
-    if (identical(species_name, "Homo sapiens") && file.exists(regulatory_build_bed)) {
+    if (nzchar(regulatory_build_bed) && file.exists(regulatory_build_bed)) {
       reg <- read_local_regulatory_build()
 
       if (nrow(reg) > 0) {
@@ -8255,7 +8391,7 @@ server <- function(input, output, session) {
     }
 
     if (nrow(reg) == 0) {
-      reg <- load_regulatory_build_from_biomart()
+      reg <- load_regulatory_build_from_ensembl_ftp()
     }
 
     if (is.data.frame(reg) && nrow(reg) > 0) {
@@ -10010,11 +10146,151 @@ server <- function(input, output, session) {
   )
 
   
-  make_table_downloads(
-    id_prefix = "pastaa",
-    all_reactive = pastaa_all_table,
-    file_prefix = "pastaa_results",
-    gene_reactive = reactive(input$pastaa_gene)
+  output$pastaa_all_csv <- downloadHandler(
+
+    filename = function() {
+
+      run_mode <- input$pastaa_run_mode %||% "gene"
+      n_regions <- as.integer(input$pastaa_n_regions)
+
+      if (identical(run_mode, "gene")) {
+
+        gene_resolved <- resolve_igv_gene_input(input$pastaa_gene)
+
+        gene_id <- if (!is.null(gene_resolved)) {
+          gene_resolved$gene_id
+        } else {
+          make_safe_id(input$pastaa_gene %||% "gene")
+        }
+
+        paste0(
+          "pastaa_",
+          make_safe_id(gene_id),
+          "_n",
+          n_regions,
+          ".csv"
+        )
+
+      } else {
+
+        groups <- input$pastaa_celltypes %||% character(0)
+
+        group_label <- if (length(groups) == 1) {
+          make_safe_id(groups)
+        } else {
+          paste0(length(groups), "_biological_groups")
+        }
+
+        parts <- c(
+          "pastaa",
+          group_label,
+          paste0("n", n_regions)
+        )
+
+        if (isTRUE(input$pastaa_filter_performance)) {
+
+          threshold <- format(
+            as.numeric(input$pastaa_min_test_correlation),
+            scientific = FALSE,
+            trim = TRUE
+          )
+
+          threshold <- gsub("\\.", "p", threshold)
+
+          parts <- c(
+            parts,
+            paste0("corr", threshold)
+          )
+        }
+
+        paste0(
+          paste(parts, collapse = "_"),
+          ".csv"
+        )
+      }
+    },
+
+    content = function(file) {
+      write_download_table(
+        pastaa_all_table(),
+        file,
+        sep = ","
+      )
+    }
+  )
+
+
+  output$pastaa_all_tsv <- downloadHandler(
+
+    filename = function() {
+
+      run_mode <- input$pastaa_run_mode %||% "gene"
+      n_regions <- as.integer(input$pastaa_n_regions)
+
+      if (identical(run_mode, "gene")) {
+
+        gene_resolved <- resolve_igv_gene_input(input$pastaa_gene)
+
+        gene_id <- if (!is.null(gene_resolved)) {
+          gene_resolved$gene_id
+        } else {
+          make_safe_id(input$pastaa_gene %||% "gene")
+        }
+
+        paste0(
+          "pastaa_",
+          make_safe_id(gene_id),
+          "_n",
+          n_regions,
+          ".tsv"
+        )
+
+      } else {
+
+        groups <- input$pastaa_celltypes %||% character(0)
+
+        group_label <- if (length(groups) == 1) {
+          make_safe_id(groups)
+        } else {
+          paste0(length(groups), "_biological_groups")
+        }
+
+        parts <- c(
+          "pastaa",
+          group_label,
+          paste0("n", n_regions)
+        )
+
+        if (isTRUE(input$pastaa_filter_performance)) {
+
+          threshold <- format(
+            as.numeric(input$pastaa_min_test_correlation),
+            scientific = FALSE,
+            trim = TRUE
+          )
+
+          threshold <- gsub("\\.", "p", threshold)
+
+          parts <- c(
+            parts,
+            paste0("corr", threshold)
+          )
+        }
+
+        paste0(
+          paste(parts, collapse = "_"),
+          ".tsv"
+        )
+      }
+    },
+
+    content = function(file) {
+      write_download_table(
+        pastaa_all_table(),
+        file,
+        sep = "\t"
+      )
+    }
   )
 
 }
