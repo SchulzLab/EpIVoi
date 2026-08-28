@@ -4,7 +4,7 @@ EpIVoi is an interactive **R/Shiny application** for exploring model performance
 
 The application combines model-level and gene-level summaries with interactive genomic visualization and downstream TF analysis.
 
-![EpIVoi overview](docs/screenshots/01_overview.png)
+![EpIVoi overview](docs/screenshots/01_overview.pdf)
 
 ## Main features
 
@@ -43,7 +43,7 @@ Users can:
 
 This tab is useful for identifying well-performing models before inspecting individual genes in more detail.
 
-![Overview tab](docs/screenshots/01_overview.png)
+![Overview tab](docs/screenshots/01_overview.pdf)
 
 ### 2. Train vs Test
 
@@ -60,7 +60,7 @@ Users can:
 
 This view can help identify differences between training and test performance and select genes for downstream inspection.
 
-![Train vs Test tab](docs/screenshots/02_train_test.png)
+![Train vs Test tab](docs/screenshots/02_train_test.pdf)
 
 ### 3. Feature Importance
 
@@ -77,7 +77,7 @@ Users can:
 
 Regions are ranked by the absolute magnitude of Feature Importance while the sign of the original score is retained.
 
-![Feature Importance tab](docs/screenshots/03_feature_importance.png)
+![Feature Importance tab](docs/screenshots/03_feature_importance.pdf)
 
 ### 4. IGV
 
@@ -95,7 +95,7 @@ Users can select one or more biological groups, load a gene locus, optionally di
 
 A local regulatory-build BED file is not required for the standard configuration. If no local override is supplied, compatible Ensembl regulatory annotations can be obtained dynamically.
 
-![IGV tab](docs/screenshots/04_igv.png)
+![IGV tab](docs/screenshots/04_igv.pdf)
 
 ### 5. TF enrichment
 
@@ -122,7 +122,7 @@ Positive and negative TF enrichment can be compared in a **combined dot plot**, 
 
 For biological-group analyses, gene-level Feature Importance files can be read in parallel on Unix-like systems.
 
-![TF enrichment tab](docs/screenshots/05_tf_enrichment.png)
+![TF enrichment tab](docs/screenshots/05_tf_enrichment.pdf)
 
 ### 6. FIMO motif analysis
 
@@ -130,7 +130,7 @@ FIMO is launched from the **IGV** workflow.
 
 TFs can be obtained from the latest saved PASTAA results or entered manually. EpIVoi maps TF names to available motifs, runs FIMO using the configured motif database and background, and adds successful motif-site predictions to the IGV view.
 
-![FIMO results](docs/screenshots/06_fimo.png)
+![FIMO results](docs/screenshots/06_fimo.pdf)
 
 ### 7. Reproducibility
 
@@ -306,12 +306,12 @@ docs/screenshots/
 Expected filenames:
 
 ```text
-01_overview.png
-02_train_test.png
-03_feature_importance.png
-04_igv.png
-05_tf_enrichment.png
-06_fimo.png
+01_overview.pdf
+02_train_test.pdf
+03_feature_importance.pdf
+04_igv.pdf
+05_tf_enrichment.pdf
+06_fimo.pdf
 ```
 
 ---

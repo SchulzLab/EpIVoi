@@ -3,19 +3,19 @@
 Place the six final screenshots in this directory using exactly these filenames:
 
 ```text
-01_overview.png
-02_train_test.png
-03_feature_importance.png
-04_igv.png
-05_tf_enrichment.png
-06_fimo.png
+01_overview.pdf
+02_train_test.pdf
+03_feature_importance.pdf
+04_igv.pdf
+05_tf_enrichment.pdf
+06_fimo.pdf
 ```
 
 The main `README.md` already references these paths, so GitHub will display the screenshots automatically once the PNG files are added here.
 
 ## Screenshot checklist
 
-### `01_overview.png`
+### `01_overview.pdf`
 
 Show:
 
@@ -24,7 +24,7 @@ Show:
 - representative performance plots;
 - preferably a gene search or part of the performance table.
 
-### `02_train_test.png`
+### `02_train_test.pdf`
 
 Show:
 
@@ -32,7 +32,7 @@ Show:
 - the train/test scatter plot;
 - representative highlighted genes.
 
-### `03_feature_importance.png`
+### `03_feature_importance.pdf`
 
 Show:
 
@@ -41,7 +41,7 @@ Show:
 - the Feature Importance bar plot;
 - enough of the table or controls to identify the workflow.
 
-### `04_igv.png`
+### `04_igv.pdf`
 
 Show:
 
@@ -51,7 +51,7 @@ Show:
 - epigenetic-signal track;
 - Ensembl regulatory annotations if enabled.
 
-### `05_tf_enrichment.png`
+### `05_tf_enrichment.pdf`
 
 Prefer a screenshot showing:
 
@@ -61,7 +61,7 @@ Prefer a screenshot showing:
 
 If the current bar plot and absolute dot plot fit cleanly, they may also be included.
 
-### `06_fimo.png`
+### `06_fimo.pdf`
 
 Show:
 
