@@ -1783,17 +1783,10 @@ ui <- tagList(
 
           download_buttons_ui("pastaa", "Download PASTAA results"),
 
-          h4("Positive Feature Importance"),
-          plotOutput(
-            "pastaa_top_tf_barplot_pos",
-            height = "350px"
-          ),
+          uiOutput("pastaa_top_tf_barplot_title"),
 
-          br(),
-
-          h4("Negative Feature Importance"),
           plotOutput(
-            "pastaa_top_tf_barplot_neg",
+            "pastaa_top_tf_barplot_current",
             height = "350px"
           ),
 
@@ -1801,33 +1794,52 @@ ui <- tagList(
             column(
               6,
               downloadButton(
-                "download_pastaa_top_tf_pos_pdf",
-                "Download positive TF plot as PDF"
-              )
-            ),
-            column(
-              6,
-              downloadButton(
-                "download_pastaa_top_tf_neg_pdf",
-                "Download negative TF plot as PDF"
+                "download_pastaa_top_tf_current_pdf",
+                "Download this TF plot as PDF"
               )
             )
           ),
 
           br(),
 
-          plotOutput("pastaa_ct_dotplot", height = "450px"),
+          h4("Positive vs. Negative Feature Importance (combined, by group)"),
+
+          plotOutput(
+            "pastaa_top_tf_barplot_combined",
+            height = "450px"
+          ),
 
           fluidRow(
             column(
-              4,
+              6,
               downloadButton(
-                "download_pastaa_dotplot_pdf",
-                "Download TF dotplot as PDF"
+                "download_pastaa_top_tf_combined_pdf",
+                "Download combined TF plot as PDF"
               )
             )
           ),
+
+          br(),
+
+          h4("Absolute Feature Importance (by group)"),
+
+          plotOutput(
+            "pastaa_abs_dotplot",
+            height = "450px"
+          ),
+
+          fluidRow(
+            column(
+              6,
+              downloadButton(
+                "download_pastaa_abs_dotplot_pdf",
+                "Download absolute TF dotplot as PDF"
+              )
+            )
+          ),
+
           hr(),
+
           uiOutput("pastaa_result_tabs")
         )
       )
@@ -4114,55 +4126,222 @@ server <- function(input, output, session) {
         }
       )
 
+      pastaa_n_cores <- {
+        env_cores <- suppressWarnings(
+          as.integer(
+            Sys.getenv(
+              "EPIVOI_PASTAA_CORES",
+              ""
+            )
+          )
+        )
+
+        if (
+          is.finite(env_cores) &&
+          env_cores >= 1L
+        ) {
+          env_cores
+        } else {
+          max(
+            1L,
+            floor(
+              parallel::detectCores(
+                logical = TRUE
+              ) / 2L
+            )
+          )
+        }
+      }
+
+      use_parallel <-
+        pastaa_n_cores > 1L &&
+        .Platform$OS.type == "unix"
+
+
+      read_one_gene_fi <- function(g) {
+        tryCatch(
+          {
+            gene_df <- load_igv_shap_df(
+              g,
+              ct
+            ) |>
+              dplyr::filter(
+                is.finite(score)
+              )
+
+            if (nrow(gene_df) == 0) {
+              NULL
+            } else {
+              score_sd <- stats::sd(
+                gene_df$score,
+                na.rm = TRUE
+              )
+
+              if (
+                !is.finite(score_sd) ||
+                score_sd == 0
+              ) {
+                NULL
+              } else {
+                gene_df |>
+                  dplyr::mutate(
+                    score_z = as.numeric(
+                      scale(score)
+                    )
+                  )
+              }
+            }
+          },
+          error = function(e) NULL
+        )
+      }
+
+
       df_list <- shiny::withProgress(
-        message = paste0("Preparing TF enrichment: ", ct),
+        message = paste0(
+          "Preparing TF enrichment: ",
+          ct
+        ),
+
         detail = paste0(
           "Reading ",
           length(genes_for_enrichment),
-          " gene-level Feature Importance files"
+          " gene-level Feature Importance files",
+          if (use_parallel) {
+            paste0(
+              " using ",
+              pastaa_n_cores,
+              " cores"
+            )
+          } else {
+            ""
+          }
         ),
+
         value = 0,
+
         {
-          n_genes <- length(genes_for_enrichment)
-          progress_every <- max(1L, floor(n_genes / 100L))
+          n_genes <- length(
+            genes_for_enrichment
+          )
 
-          out_list <- vector("list", n_genes)
+          if (use_parallel) {
 
-          for (i in seq_along(genes_for_enrichment)) {
-            g <- genes_for_enrichment[[i]]
-
-            out_list[[i]] <- tryCatch(
-              {
-                gene_df <- load_igv_shap_df(g, ct) |>
-                  dplyr::filter(is.finite(score))
-
-                if (nrow(gene_df) == 0) {
-                  NULL
-                } else {
-                  score_sd <- stats::sd(gene_df$score, na.rm = TRUE)
-
-                  if (!is.finite(score_sd) || score_sd == 0) {
-                    NULL
-                  } else {
-                    gene_df |>
-                      dplyr::mutate(
-                        score_z = as.numeric(scale(score))
-                      )
-                  }
-                }
-              },
-              error = function(e) NULL
+            n_chunks <- min(
+              20L,
+              n_genes
             )
 
-            if (i == 1L || i == n_genes || i %% progress_every == 0L) {
+            chunk_ids <- ceiling(
+              seq_along(
+                genes_for_enrichment
+              ) /
+                (
+                  n_genes /
+                    n_chunks
+                )
+            )
+
+            gene_chunks <- split(
+              genes_for_enrichment,
+              chunk_ids
+            )
+
+            out_list <- vector(
+              "list",
+              0
+            )
+
+            n_done <- 0L
+
+            for (chunk in gene_chunks) {
+
+              chunk_results <-
+                parallel::mclapply(
+                  chunk,
+                  read_one_gene_fi,
+                  mc.cores = pastaa_n_cores
+                )
+
+              out_list <- c(
+                out_list,
+                chunk_results
+              )
+
+              n_done <-
+                n_done +
+                length(chunk)
+
               shiny::setProgress(
-                value = i / n_genes,
+                value = n_done / n_genes,
+
                 detail = paste0(
-                  "Read ", format(i, big.mark = ","),
-                  " / ", format(n_genes, big.mark = ","),
-                  " genes"
+                  "Read ",
+                  format(
+                    n_done,
+                    big.mark = ","
+                  ),
+                  " / ",
+                  format(
+                    n_genes,
+                    big.mark = ","
+                  ),
+                  " genes (",
+                  pastaa_n_cores,
+                  " cores)"
                 )
               )
+            }
+
+          } else {
+
+            progress_every <- max(
+              1L,
+              floor(
+                n_genes / 100L
+              )
+            )
+
+            out_list <- vector(
+              "list",
+              n_genes
+            )
+
+            for (
+              i in seq_along(
+                genes_for_enrichment
+              )
+            ) {
+
+              out_list[[i]] <-
+                read_one_gene_fi(
+                  genes_for_enrichment[[i]]
+                )
+
+              if (
+                i == 1L ||
+                i == n_genes ||
+                i %% progress_every == 0L
+              ) {
+
+                shiny::setProgress(
+                  value = i / n_genes,
+
+                  detail = paste0(
+                    "Read ",
+                    format(
+                      i,
+                      big.mark = ","
+                    ),
+                    " / ",
+                    format(
+                      n_genes,
+                      big.mark = ","
+                    ),
+                    " genes"
+                  )
+                )
+              }
             }
           }
 
@@ -9233,14 +9412,20 @@ server <- function(input, output, session) {
     req(!is.null(df), nrow(df) > 0)
 
     plot_df <- df |>
-      dplyr::filter(.data$direction == direction)
+      dplyr::filter(.data$direction == .env$direction)
 
     shiny::validate(
       shiny::need(
         nrow(plot_df) > 0,
         paste0(
           "No ",
-          ifelse(direction == "pos", "positive", "negative"),
+          switch(
+            direction,
+            pos = "positive",
+            neg = "negative",
+            abs = "absolute",
+            direction
+          ),
           " PASTAA results pass the selected q-value cutoff."
         )
       )
@@ -9257,13 +9442,13 @@ server <- function(input, output, session) {
         TF = factor(TF, levels = rev(TF))
       )
 
-    direction_label <- if (
-      direction == "pos"
-    ) {
-      "Positive Feature Importance"
-    } else {
-      "Negative Feature Importance"
-    }
+    direction_label <- switch(
+      direction,
+      pos = "Positive Feature Importance",
+      neg = "Negative Feature Importance",
+      abs = "Absolute Feature Importance",
+      direction
+    )
 
     ggplot(
       top_df,
@@ -9285,6 +9470,314 @@ server <- function(input, output, session) {
       ) +
       theme_bw(base_size = 14)
   }
+
+  make_pastaa_posneg_combined_plot <- function(
+      df,
+      top_n,
+      q_cutoff,
+      max_groups = 10
+    ) {
+      shiny::validate(
+        shiny::need(
+          !is.null(df) && nrow(df) > 0,
+          paste0(
+            "No TF enrichment results pass the selected q-value cutoff (≤ ",
+            q_cutoff,
+            ")."
+          )
+        )
+      )
+
+      df <- df |>
+        dplyr::filter(direction %in% c("pos", "neg")) |>
+        dplyr::mutate(cell_type = as.character(cell_type))
+
+      shiny::validate(
+        shiny::need(
+          nrow(df) > 0,
+          "No positive/negative TF enrichment results are available."
+        )
+      )
+
+      all_groups <- sort(unique(df$cell_type))
+      n_groups_total <- length(all_groups)
+      groups_used <- all_groups[seq_len(min(max_groups, n_groups_total))]
+      groups_dropped <- setdiff(all_groups, groups_used)
+
+      df <- df |>
+        dplyr::filter(cell_type %in% groups_used)
+
+      rank_top_tfs <- function(direction_filter) {
+        df |>
+          dplyr::filter(direction == direction_filter) |>
+          dplyr::group_by(TF) |>
+          dplyr::summarise(
+            best_fdr = min(BH_FDR, na.rm = TRUE),
+            best_p = min(p_value, na.rm = TRUE),
+            .groups = "drop"
+          ) |>
+          dplyr::arrange(best_fdr, best_p) |>
+          dplyr::slice_head(n = top_n) |>
+          dplyr::pull(TF)
+      }
+
+      top_pos <- rank_top_tfs("pos")
+      top_neg <- rank_top_tfs("neg")
+      top_tfs <- union(top_pos, top_neg)
+
+      shiny::validate(
+        shiny::need(
+          length(top_tfs) > 0,
+          "No TFs pass the selected q-value cutoff in either direction."
+        )
+      )
+
+      n_available_pos <- dplyr::n_distinct(df$TF[df$direction == "pos"])
+      n_available_neg <- dplyr::n_distinct(df$TF[df$direction == "neg"])
+      n_shown_pos <- length(top_pos)
+      n_shown_neg <- length(top_neg)
+
+      plot_df <- df |>
+        dplyr::filter(TF %in% top_tfs) |>
+        dplyr::group_by(TF, cell_type, direction) |>
+        dplyr::arrange(BH_FDR, p_value, .by_group = TRUE) |>
+        dplyr::slice_head(n = 1) |>
+        dplyr::ungroup() |>
+        dplyr::mutate(
+          direction = factor(direction, levels = c("pos", "neg")),
+          cell_type = factor(cell_type, levels = groups_used)
+        )
+
+      tf_order <- plot_df |>
+        dplyr::group_by(TF) |>
+        dplyr::summarise(
+          max_sig = max(minus_log10_q),
+          .groups = "drop"
+        ) |>
+        dplyr::arrange(dplyr::desc(max_sig)) |>
+        dplyr::pull(TF)
+
+      plot_df$TF <- factor(
+        plot_df$TF,
+        levels = rev(tf_order)
+      )
+
+      subtitle_lines <- c(
+        paste0(
+          "Positive: showing ", n_shown_pos, " of ", n_available_pos,
+          " eligible TFs | Negative: showing ", n_shown_neg, " of ",
+          n_available_neg, " eligible TFs"
+        ),
+        if (length(groups_dropped) > 0) {
+          paste0(
+            n_groups_total,
+            " metadata groups loaded, showing first ",
+            length(groups_used),
+            " (",
+            paste(groups_used, collapse = ", "),
+            "). Not shown: ",
+            paste(groups_dropped, collapse = ", "),
+            ". Re-run PASTAA with fewer groups selected to compare others."
+          )
+        } else {
+          NULL
+        }
+      )
+
+      ggplot(
+        plot_df,
+        aes(
+          x = cell_type,
+          y = TF,
+          size = minus_log10_q,
+          colour = direction,
+          group = direction
+        )
+      ) +
+        geom_point(
+          alpha = 0.9,
+          position = position_dodge(width = 0.3)
+        ) +
+        scale_colour_manual(
+          values = c(
+            "pos" = "#D55E00",
+            "neg" = "#0072B2"
+          )
+        ) +
+        labs(
+          x = "Metadata group",
+          y = "TF",
+          size = "-log10(q-value / BH FDR)",
+          colour = "Feature Importance direction",
+          title = paste0(
+            "Top enriched TFs by group, top ",
+            top_n,
+            " per direction (ranked across all shown groups), q-value cutoff ≤ ",
+            q_cutoff
+          ),
+          subtitle = paste(
+            subtitle_lines,
+            collapse = "\n"
+          )
+        ) +
+        theme_bw(base_size = 14) +
+        theme(
+          axis.text.x = element_text(
+            angle = 45,
+            hjust = 1
+          ),
+          plot.subtitle = element_text(
+            size = 10,
+            colour = "grey40"
+          )
+        )
+    }
+
+  make_pastaa_abs_dotplot <- function(
+      df,
+      top_n,
+      q_cutoff,
+      max_groups = 10
+    ) {
+      shiny::validate(
+        shiny::need(
+          !is.null(df) && nrow(df) > 0,
+          paste0(
+            "No TF enrichment results pass the selected q-value cutoff (≤ ",
+            q_cutoff,
+            ")."
+          )
+        )
+      )
+
+      df <- df |>
+        dplyr::filter(direction == "abs") |>
+        dplyr::mutate(cell_type = as.character(cell_type))
+
+      shiny::validate(
+        shiny::need(
+          nrow(df) > 0,
+          "No absolute-direction TF enrichment results are available."
+        )
+      )
+
+      all_groups <- sort(unique(df$cell_type))
+      n_groups_total <- length(all_groups)
+      groups_used <- all_groups[seq_len(min(max_groups, n_groups_total))]
+      groups_dropped <- setdiff(all_groups, groups_used)
+
+      df <- df |>
+        dplyr::filter(cell_type %in% groups_used)
+
+      top_tfs <- df |>
+        dplyr::group_by(TF) |>
+        dplyr::summarise(
+          best_fdr = min(BH_FDR, na.rm = TRUE),
+          best_p = min(p_value, na.rm = TRUE),
+          .groups = "drop"
+        ) |>
+        dplyr::arrange(best_fdr, best_p) |>
+        dplyr::slice_head(n = top_n) |>
+        dplyr::pull(TF)
+
+      shiny::validate(
+        shiny::need(
+          length(top_tfs) > 0,
+          "No TFs pass the selected q-value cutoff."
+        )
+      )
+
+      n_available <- dplyr::n_distinct(df$TF)
+      n_shown <- length(top_tfs)
+
+      plot_df <- df |>
+        dplyr::filter(TF %in% top_tfs) |>
+        dplyr::group_by(TF, cell_type) |>
+        dplyr::arrange(BH_FDR, p_value, .by_group = TRUE) |>
+        dplyr::slice_head(n = 1) |>
+        dplyr::ungroup() |>
+        dplyr::mutate(
+          cell_type = factor(cell_type, levels = groups_used)
+        )
+
+      tf_order <- plot_df |>
+        dplyr::group_by(TF) |>
+        dplyr::summarise(
+          max_sig = max(minus_log10_q),
+          .groups = "drop"
+        ) |>
+        dplyr::arrange(dplyr::desc(max_sig)) |>
+        dplyr::pull(TF)
+
+      plot_df$TF <- factor(
+        plot_df$TF,
+        levels = rev(tf_order)
+      )
+
+      subtitle_lines <- c(
+        paste0(
+          "Showing ",
+          n_shown,
+          " of ",
+          n_available,
+          " eligible TFs"
+        ),
+        if (length(groups_dropped) > 0) {
+          paste0(
+            n_groups_total,
+            " metadata groups loaded, showing first ",
+            length(groups_used),
+            " (",
+            paste(groups_used, collapse = ", "),
+            "). Not shown: ",
+            paste(groups_dropped, collapse = ", "),
+            "."
+          )
+        } else {
+          NULL
+        }
+      )
+
+      ggplot(
+        plot_df,
+        aes(
+          x = cell_type,
+          y = TF,
+          size = minus_log10_q
+        )
+      ) +
+        geom_point(
+          alpha = 0.9,
+          colour = "#5B2C6F"
+        ) +
+        labs(
+          x = "Metadata group",
+          y = "TF",
+          size = "-log10(q-value / BH FDR)",
+          title = paste0(
+            "Top enriched TFs by group, top ",
+            top_n,
+            " (ranked across all shown groups) -- Absolute Feature Importance, ",
+            "q-value cutoff ≤ ",
+            q_cutoff
+          ),
+          subtitle = paste(
+            subtitle_lines,
+            collapse = "\n"
+          )
+        ) +
+        theme_bw(base_size = 14) +
+        theme(
+          axis.text.x = element_text(
+            angle = 45,
+            hjust = 1
+          ),
+          plot.subtitle = element_text(
+            size = 10,
+            colour = "grey40"
+          )
+        )
+    }
 
 
   make_pastaa_dotplot <- function(df, top_n, q_cutoff) {
@@ -9369,32 +9862,95 @@ server <- function(input, output, session) {
       )
   }
 
-  output$pastaa_top_tf_barplot_pos <- renderPlot({
+  pastaa_selected_direction <- reactive({
+    res_list <- pastaa_results()
+
+    if (length(res_list) == 0) {
+      return(NULL)
+    }
+
+    selected <- input$pastaa_selected_result_tab
+
+    if (
+      is.null(selected) ||
+      !nzchar(selected) ||
+      !selected %in% names(res_list)
+    ) {
+      selected <- names(res_list)[1]
+    }
+
+    df <- res_list[[selected]]$result
+
+    if (
+      is.null(df) ||
+      nrow(df) == 0 ||
+      !"direction" %in% names(df)
+    ) {
+      return(NULL)
+    }
+
+    unique(as.character(df$direction))[1]
+  })
+
+
+  output$pastaa_top_tf_barplot_title <- renderUI({
+    direction <- pastaa_selected_direction()
+
+    if (is.null(direction) || length(direction) != 1L || !nzchar(direction)) {
+      return(NULL)
+    }
+
+    label <- switch(
+      direction,
+      pos = "Positive Feature Importance",
+      neg = "Negative Feature Importance",
+      abs = "Absolute Feature Importance",
+      "Feature Importance"
+    )
+
+    h4(paste0(label, " (current selection)"))
+  })
+
+
+  output$pastaa_top_tf_barplot_current <- renderPlot({
+
+    direction <- pastaa_selected_direction()
+
+    shiny::validate(
+      shiny::need(
+        !is.null(direction),
+        "No PASTAA results yet. Select a gene/biological group and click Start PASTAA."
+      )
+    )
+
     df <- pastaa_selected_direction_pair_df()
 
     make_pastaa_top_tf_plot(
       df = df,
       top_n = input$pastaa_save_top_n,
       q_cutoff = input$pastaa_q_cutoff,
-      direction = "pos"
+      direction = direction
     )
   })
 
-  output$pastaa_top_tf_barplot_neg <- renderPlot({
-    df <- pastaa_selected_direction_pair_df()
 
-    make_pastaa_top_tf_plot(
+  output$pastaa_abs_dotplot <- renderPlot({
+
+    df <- pastaa_summary_df()
+
+    make_pastaa_abs_dotplot(
       df = df,
       top_n = input$pastaa_save_top_n,
-      q_cutoff = input$pastaa_q_cutoff,
-      direction = "neg"
+      q_cutoff = input$pastaa_q_cutoff
     )
   })
 
-  output$pastaa_ct_dotplot <- renderPlot({
-    df <- pastaa_selected_df()
 
-    make_pastaa_dotplot(
+  output$pastaa_top_tf_barplot_combined <- renderPlot({
+
+    df <- pastaa_summary_df()
+
+    make_pastaa_posneg_combined_plot(
       df = df,
       top_n = input$pastaa_save_top_n,
       q_cutoff = input$pastaa_q_cutoff
@@ -9998,6 +10554,241 @@ server <- function(input, output, session) {
 
       print(p)
 
+      grDevices::dev.off()
+    }
+  )
+  pastaa_filename_label <- function(df) {
+    if (is.null(df) || nrow(df) == 0 || !"run_mode" %in% names(df)) {
+      return("PASTAA")
+    }
+
+    modes <- unique(df$run_mode)
+
+    if (length(modes) == 1L && identical(modes, "celltype")) {
+      groups <- unique(as.character(df$cell_type))
+      paste(make_safe_id(groups), collapse = "_vs_")
+
+    } else if (length(modes) == 1L && identical(modes, "gene")) {
+      genes <- unique(as.character(df$gene_id))
+      make_safe_id(paste(genes, collapse = "_"))
+
+    } else {
+      "PASTAA"
+    }
+  }
+  output$download_pastaa_top_tf_current_pdf <- downloadHandler(
+    filename = function() {
+      label <- pastaa_filename_label(
+        pastaa_selected_direction_pair_df()
+      )
+
+      direction <- pastaa_selected_direction()
+
+      direction_label <- switch(
+        direction,
+        pos = "positive",
+        neg = "negative",
+        abs = "absolute",
+        "unknown"
+      )
+
+      paste0(
+        label,
+        "_TF_enrichment_",
+        direction_label,
+        "_",
+        format(Sys.time(), "%Y%m%d_%H%M%S"),
+        ".pdf"
+      )
+    },
+
+    content = function(file) {
+      direction <- pastaa_selected_direction()
+
+      shiny::validate(
+        shiny::need(
+          !is.null(direction),
+          "No PASTAA results available."
+        )
+      )
+
+      df <- pastaa_selected_direction_pair_df()
+
+      shiny::validate(
+        shiny::need(
+          !is.null(df) && nrow(df) > 0,
+          "No PASTAA results available."
+        )
+      )
+
+      p <- make_pastaa_top_tf_plot(
+        df = df,
+        top_n = input$pastaa_save_top_n,
+        q_cutoff = input$pastaa_q_cutoff,
+        direction = direction
+      )
+
+      grDevices::cairo_pdf(
+        filename = file,
+        width = 8.5,
+        height = 5.5,
+        onefile = TRUE
+      )
+
+      print(p)
+      grDevices::dev.off()
+    }
+  )
+
+
+  output$download_pastaa_abs_dotplot_pdf <- downloadHandler(
+    filename = function() {
+      df <- pastaa_summary_df()
+
+      label <- if (
+        is.null(df) ||
+        nrow(df) == 0 ||
+        !"cell_type" %in% names(df)
+      ) {
+        "PASTAA"
+
+      } else {
+        groups <- unique(
+          as.character(
+            df$cell_type[df$direction == "abs"]
+          )
+        )
+
+        safe_groups <- make_safe_id(groups)
+
+        if (length(safe_groups) == 0L) {
+          "PASTAA"
+
+        } else if (length(safe_groups) <= 3L) {
+          paste(
+            safe_groups,
+            collapse = "_vs_"
+          )
+
+        } else {
+          paste0(
+            paste(
+              safe_groups[1:3],
+              collapse = "_vs_"
+            ),
+            "_and_",
+            length(safe_groups) - 3L,
+            "more"
+          )
+        }
+      }
+
+      paste0(
+        label,
+        "_TF_enrichment_absolute_dotplot_",
+        format(Sys.time(), "%Y%m%d_%H%M%S"),
+        ".pdf"
+      )
+    },
+
+    content = function(file) {
+      df <- pastaa_summary_df()
+
+      shiny::validate(
+        shiny::need(
+          !is.null(df) && nrow(df) > 0,
+          "No PASTAA results available."
+        )
+      )
+
+      p <- make_pastaa_abs_dotplot(
+        df = df,
+        top_n = input$pastaa_save_top_n,
+        q_cutoff = input$pastaa_q_cutoff
+      )
+
+      grDevices::cairo_pdf(
+        filename = file,
+        width = 9.5,
+        height = 6.5,
+        onefile = TRUE
+      )
+
+      print(p)
+      grDevices::dev.off()
+    }
+  )
+
+
+  output$download_pastaa_top_tf_combined_pdf <- downloadHandler(
+    filename = function() {
+      df <- pastaa_summary_df()
+
+      label <- if (
+        is.null(df) ||
+        nrow(df) == 0 ||
+        !"cell_type" %in% names(df)
+      ) {
+        "PASTAA"
+
+      } else {
+        groups <- unique(
+          as.character(df$cell_type)
+        )
+
+        safe_groups <- make_safe_id(groups)
+
+        if (length(safe_groups) <= 3L) {
+          paste(
+            safe_groups,
+            collapse = "_vs_"
+          )
+
+        } else {
+          paste0(
+            paste(
+              safe_groups[1:3],
+              collapse = "_vs_"
+            ),
+            "_and_",
+            length(safe_groups) - 3L,
+            "more"
+          )
+        }
+      }
+
+      paste0(
+        label,
+        "_TF_enrichment_combined_",
+        format(Sys.time(), "%Y%m%d_%H%M%S"),
+        ".pdf"
+      )
+    },
+
+    content = function(file) {
+      df <- pastaa_summary_df()
+
+      shiny::validate(
+        shiny::need(
+          !is.null(df) && nrow(df) > 0,
+          "No PASTAA results available."
+        )
+      )
+
+      p <- make_pastaa_posneg_combined_plot(
+        df = df,
+        top_n = input$pastaa_save_top_n,
+        q_cutoff = input$pastaa_q_cutoff
+      )
+
+      grDevices::cairo_pdf(
+        filename = file,
+        width = 9.5,
+        height = 6.5,
+        onefile = TRUE
+      )
+
+      print(p)
       grDevices::dev.off()
     }
   )

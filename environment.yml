@@ -1,0 +1,21 @@
+name: epivoi
+
+channels:
+  - conda-forge
+  - bioconda
+
+dependencies:
+  - r-base>=4.1
+  - r-shiny
+  - r-dplyr
+  - r-ggplot2
+  - r-plotly
+  - r-shinyjs
+  - r-dt
+  - r-tibble
+  - r-purrr
+  - r-stringr
+  - r-tidyr
+  - r-jsonlite
+  - r-later
+  - meme
