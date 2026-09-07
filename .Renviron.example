@@ -1,13 +1,24 @@
+# RefSeq annotation used for genomic/PDF annotation
 EPIVOI_REFSEQ_FILE=/path/to/ncbiRefSeq.txt.gz
+
+# Directory containing igv.min.js and igv.min.css
 EPIVOI_IGV_ASSETS_DIR=/path/to/igv
 
+# PASTAA / TRAP executables
 EPIVOI_TRAP_BIN=/path/to/TRAP
 EPIVOI_PASTAA_BIN=/path/to/PASTAA
-EPIVOI_PASTAA_ENERGY_MATRIX=/path/to/Jaspar_Hocomoco_Kellis_human_energy.txt
 
+# Binding-energy matrix used by TRAP / PASTAA
+EPIVOI_PASTAA_ENERGY_MATRIX=/path/to/binding_energy_matrix.txt
+
+# Reference genome
 EPIVOI_GENOME_FASTA=/path/to/hg38.fa
-EPIVOI_MEME_MOTIF_FILE=/path/to/JASPAR2026_CORE_vertebrates_non-redundant_pfms_meme.meme
-EPIVOI_FIMO_ENCODE_BG=/path/to/fimo_encode_background.txt
+
+# Motif database used by FIMO
+EPIVOI_MEME_MOTIF_FILE=/path/to/motifs.meme
+
+# Background resource used by FIMO
+EPIVOI_FIMO_ENCODE_BG=/path/to/fimo_background.txt
 
 # Optional
 # EPIVOI_PASTAA_CORES=4

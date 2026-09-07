@@ -246,6 +246,34 @@ export EPIVOI_PASTAA_CORES=4
 If no value is provided, the application selects a suitable number of workers automatically. A sequential fallback is used where fork-based parallelization is unavailable.
 
 ---
+## Software versions used for the implementation
+
+The current EpIVoi implementation was tested with the following external software:
+
+| Component | Version | Usage |
+|---|---:|---|
+| IGV.js | 3.3.1 | Interactive genomic visualization in the IGV tab |
+| MEME Suite / FIMO | 5.5.7 | Prediction of transcription-factor motif occurrences |
+| TRAP | local executable | Calculation of transcription-factor binding affinities |
+| PASTAA | local executable | Transcription-factor enrichment analysis |
+
+IGV is implemented directly using IGV.js and is not based on the `igvShiny` R package.
+
+## FIMO parameters
+
+EpIVoi uses FIMO from MEME Suite to identify predicted transcription-factor binding sites.
+
+The current implementation uses:
+
+- FIMO version: 5.5.7
+- motif pseudocount: `0.1`
+- significance threshold: `p-value <= 1e-4`
+- threshold type: p-value
+- strand search: both strands, as defined by the MEME motif file
+
+The FIMO motif collection and nucleotide background are configurable external resources.
+
+The final motif collection and GC background shared between FIMO and PASTAA/TRAP are currently being harmonized and will be documented once the common source files are finalized.
 
 ## Reproducibility and downloads
 
@@ -256,6 +284,25 @@ The **Reproducibility** tab additionally generates an R script reflecting the cu
 Large external resources are referenced through configurable paths rather than hard-coded into the repository.
 
 ---
+## Required input files and external resources
+
+EpIVoi requires several external resources in addition to the visualization object.
+
+| Resource | Expected format | Example |
+|---|---|---|
+| EpIVoi visualization object | RDS | `epivoi_object.rds` |
+| RefSeq annotation | gzipped tab-separated RefSeq table | `ncbiRefSeq.txt.gz` |
+| IGV.js assets | directory containing JavaScript and CSS files | `igv/igv.min.js`, `igv/igv.min.css` |
+| TRAP executable | executable binary | `TRAP` |
+| PASTAA executable | executable binary | `PASTAA` |
+| Binding-energy matrix | TRAP energy-matrix format | `Jaspar_Hocomoco_Kellis_human_energy.txt` |
+| Reference genome | FASTA | `hg38.fa` |
+| FIMO motif collection | MEME-format motif database | `motifs.meme` |
+| FIMO background | MEME-compatible nucleotide background / motif file with background frequencies | `fimo_background.txt` |
+
+Example paths are provided in `.Renviron.example`.
+
+The repository does not distribute large reference files. Users should provide local paths to the resources in their `.Renviron` file.
 
 ## Documentation screenshots
 
