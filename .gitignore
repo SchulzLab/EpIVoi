@@ -1,5 +1,6 @@
 # R
 .Rhistory
+.Renviron
 .RData
 .Ruserdata
 .Rproj.user/
@@ -39,3 +40,4 @@ fimo.txt
 
 # Logs
 *.log
+.Renviron

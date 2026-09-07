@@ -169,56 +169,18 @@ The environment contains R and the R packages required by the Shiny application,
 PASTAA and TRAP are external executables and must be available separately.
 
 ### 3. Configure external resources
-
-EpIVoi can use project-local resources or paths supplied through environment variables.
-
-| Variable | Purpose |
-|---|---|
-| `EPIVOI_OBJECT_PATH` | EpIVoi visualization object (`.rds`) |
-| `EPIVOI_REFSEQ_FILE` | RefSeq annotation used for vector/PDF export |
-| `EPIVOI_IGV_ASSETS_DIR` | Directory containing `igv.min.js` and `igv.min.css` |
-| `EPIVOI_TRAP_BIN` | TRAP executable |
-| `EPIVOI_PASTAA_BIN` | PASTAA executable |
-| `EPIVOI_PASTAA_ENERGY_MATRIX` | PASTAA energy matrix |
-| `EPIVOI_GENOME_FASTA` | Reference-genome FASTA |
-| `EPIVOI_FIMO_BIN` | FIMO executable; otherwise searched on `PATH` |
-| `EPIVOI_FASTA_GET_MARKOV_BIN` | `fasta-get-markov`; otherwise searched on `PATH` |
-| `EPIVOI_MEME_MOTIF_FILE` | MEME-format motif database |
-| `EPIVOI_FIMO_ENCODE_BG` | ENCODE background file used by FIMO |
-| `EPIVOI_PASTAA_CORES` | Optional worker count for biological-group PASTAA preprocessing |
-| `EPIVOI_REGULATORY_BUILD_BED` | Optional local regulatory annotation override |
-
-Example configuration:
+Copy the provided environment template:
 
 ```bash
-export EPIVOI_OBJECT_PATH="/path/to/epivoi_object.rds"
-export EPIVOI_REFSEQ_FILE="/path/to/ncbiRefSeq.txt.gz"
-export EPIVOI_IGV_ASSETS_DIR="/path/to/igv"
-
-export EPIVOI_TRAP_BIN="/path/to/TRAP"
-export EPIVOI_PASTAA_BIN="/path/to/PASTAA"
-export EPIVOI_PASTAA_ENERGY_MATRIX="/path/to/Jaspar_Hocomoco_Kellis_human_energy.txt"
-
-export EPIVOI_GENOME_FASTA="/path/to/hg38.fa"
-export EPIVOI_MEME_MOTIF_FILE="/path/to/JASPAR2026_CORE_vertebrates_non-redundant_pfms_meme.meme"
-export EPIVOI_FIMO_ENCODE_BG="/path/to/fimo_encode_background.txt"
-```
-
-Optionally set the number of parallel workers used during biological-group PASTAA preprocessing:
-
-```bash
-export EPIVOI_PASTAA_CORES=4
-```
-
-`EPIVOI_REGULATORY_BUILD_BED` does **not** need to be set for the standard configuration.
-
+cp .Renviron.example .Renviron
+Edit .Renviron and replace the placeholder paths with paths to the required external resources.
+The local .Renviron file is ignored by Git and should not be committed.
 ### 4. Start EpIVoi
-
-```bash
-Rscript app.R
+Provide the visualization object directly when starting the application:
+Rscript app.R /path/to/epivoi_object.rds
+Alternatively, EPIVOI_OBJECT_PATH can be set as an environment variable.
 ```
 
-Open the Shiny URL printed in the terminal.
 
 ---
 

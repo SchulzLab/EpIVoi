@@ -321,7 +321,7 @@ assign_corr_class <- function(df, corr_metric = "test_Pearson", low_cut = 0.3, h
     mutate(
       corr_value_for_class = suppressWarnings(as.numeric(as.character(.data[[corr_metric]]))),
       corr_class = case_when(
-        is.na(corr_value_for_class) ~ "failed",
+        is.na(corr_value_for_class) | corr_value_for_class <= 0 ~ "failed",
         corr_value_for_class < low_cut ~ "low",
         corr_value_for_class < high_cut ~ "medium",
         TRUE ~ "high"
@@ -9935,8 +9935,16 @@ server <- function(input, output, session) {
 
 
   output$pastaa_abs_dotplot <- renderPlot({
-
     df <- pastaa_summary_df()
+
+    shiny::validate(
+      shiny::need(
+        !is.null(df) &&
+          nrow(df) > 0 &&
+          any(df$direction == "abs", na.rm = TRUE),
+        "Run TF enrichment with Absolute Feature Importance to display this plot."
+      )
+    )
 
     make_pastaa_abs_dotplot(
       df = df,

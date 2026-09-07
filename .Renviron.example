@@ -1,0 +1,13 @@
+EPIVOI_REFSEQ_FILE=/path/to/ncbiRefSeq.txt.gz
+EPIVOI_IGV_ASSETS_DIR=/path/to/igv
+
+EPIVOI_TRAP_BIN=/path/to/TRAP
+EPIVOI_PASTAA_BIN=/path/to/PASTAA
+EPIVOI_PASTAA_ENERGY_MATRIX=/path/to/Jaspar_Hocomoco_Kellis_human_energy.txt
+
+EPIVOI_GENOME_FASTA=/path/to/hg38.fa
+EPIVOI_MEME_MOTIF_FILE=/path/to/JASPAR2026_CORE_vertebrates_non-redundant_pfms_meme.meme
+EPIVOI_FIMO_ENCODE_BG=/path/to/fimo_encode_background.txt
+
+# Optional
+# EPIVOI_PASTAA_CORES=4
