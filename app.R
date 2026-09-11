@@ -3660,7 +3660,77 @@ server <- function(input, output, session) {
     )
   }
 
+
   pastaa_results <- reactiveVal(list())
+
+  # TEMPORARY: restore completed PASTAA cell-type results for screenshot
+  local({
+    pastaa_restore_runs <- list(
+      "Astrocytes_Alzheimer_s_pos_n50_corr0p2" = c("Astrocytes:Alzheimer's", "pos"),
+      "Astrocytes_Alzheimer_s_neg_n50_corr0p2" = c("Astrocytes:Alzheimer's", "neg"),
+      "Astrocytes_Unaffected_pos_n50_corr0p2"   = c("Astrocytes:Unaffected", "pos"),
+      "Astrocytes_Unaffected_neg_n50_corr0p2"   = c("Astrocytes:Unaffected", "neg"),
+      "Microglia_Alzheimer_s_pos_n50_corr0p2"   = c("Microglia:Alzheimer's", "pos"),
+      "Microglia_Alzheimer_s_neg_n50_corr0p2"   = c("Microglia:Alzheimer's", "neg"),
+      "Microglia_Unaffected_pos_n50_corr0p2"    = c("Microglia:Unaffected", "pos"),
+      "Microglia_Unaffected_neg_n50_corr0p2"    = c("Microglia:Unaffected", "neg")
+    )
+
+    restored <- list()
+
+    for (run_id in names(pastaa_restore_runs)) {
+      sorted_file <- file.path(
+        pastaa_out_dir,
+        paste0(run_id, "_pastaa_sorted.txt")
+      )
+
+      if (!file.exists(sorted_file)) next
+
+      res <- read.table(
+        sorted_file,
+        sep = "\t",
+        header = FALSE,
+        quote = "",
+        stringsAsFactors = FALSE,
+        fill = TRUE
+      )
+
+      colnames(res)[seq_len(min(ncol(res), 7))] <- c(
+        "TF",
+        "p_value",
+        "optimal_targets_in_tissue",
+        "optimal_genes_in_tissue",
+        "optimal_all_targets",
+        "num_genes",
+        "num_user_genes"
+      )[seq_len(min(ncol(res), 7))]
+
+      ct <- pastaa_restore_runs[[run_id]][1]
+      direction <- pastaa_restore_runs[[run_id]][2]
+
+      res <- res |>
+        dplyr::filter(TF != "DUMMY_MOTIF") |>
+        dplyr::mutate(
+          p_value = as.numeric(p_value),
+          direction = direction,
+          cell_type = ct,
+          gene_id = "ALL_GENES",
+          run_mode = "celltype",
+          BH_FDR = stats::p.adjust(p_value, method = "BH")
+        )
+
+      restored[[run_id]] <- list(
+        result = res,
+        sorted_file = sorted_file,
+        n_regions = 50,
+        run_id = run_id,
+        run_mode = "celltype"
+      )
+    }
+
+    pastaa_results(restored)
+    message("Restored ", length(restored), " completed PASTAA results from disk.")
+  })
 
   
 
@@ -9123,9 +9193,20 @@ server <- function(input, output, session) {
           )
 
           if (inherits(res, "error")) {
-            errors <- c(errors, paste(ct, direction, ":", res$message))
+ 	    errors <- c(errors, paste(ct, direction, ":", res$message))
           } else {
             out[[res$run_id]] <- res
+
+            current_results <- pastaa_results()
+            current_results[[res$run_id]] <- res
+            pastaa_results(current_results)
+
+            message(
+              "PASTAA result stored immediately: ",
+              res$run_id,
+              " | total results in session: ",
+              length(current_results)
+            )
           }
         }
       }
@@ -9602,13 +9683,18 @@ server <- function(input, output, session) {
           values = c(
             "pos" = "#D55E00",
             "neg" = "#0072B2"
+          ),
+          breaks = c("pos", "neg"),
+          labels = c(
+            "Positive Feature Importance",
+            "Negative Feature Importance"
           )
         ) +
         labs(
           x = "Metadata group",
           y = "TF",
           size = "-log10(q-value / BH FDR)",
-          colour = "Feature Importance direction",
+          colour = "Feature Importance",
           title = paste0(
             "Top enriched TFs by group, top ",
             top_n,
