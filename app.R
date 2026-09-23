@@ -591,12 +591,37 @@ parse_shap_id <- function(id_vec) {
 }
 
 parse_interaction_safe <- function(x, default_width = 100) {
-  x <- gsub("[:_-]", " ", x)
+
+  x <- as.character(x)
+
+  # Support R-sanitized genomic coordinates such as:
+  # X8.127931640.127931990  -> chr8:127931640-127931990
+  dot_format <- grepl(
+    "^X?(?:chr)?[0-9XYM]+\\.[0-9]+\\.[0-9]+$",
+    x,
+    ignore.case = TRUE
+  )
+
+  x[dot_format] <- sub("^X", "", x[dot_format])
+  x[dot_format] <- gsub("\\.", " ", x[dot_format])
+
+  # Existing formats:
+  # chr8:127931640-127931990
+  # chr8_127931640_127931990
+  # chr8-127931640-127931990
+  x[!dot_format] <- gsub("[:_-]", " ", x[!dot_format])
+
   parts <- strsplit(x, "\\s+")
 
   chrom <- sapply(parts, `[`, 1)
   start <- suppressWarnings(as.numeric(sapply(parts, `[`, 2)))
   end   <- suppressWarnings(as.numeric(sapply(parts, `[`, 3)))
+
+  chrom <- ifelse(
+    grepl("^chr", chrom, ignore.case = TRUE),
+    chrom,
+    paste0("chr", chrom)
+  )
 
   end[is.na(end) & !is.na(start)] <-
     start[is.na(end) & !is.na(start)] + default_width
@@ -1503,7 +1528,7 @@ ui <- tagList(
           ),
         ),
         mainPanel(
-          h3("Feature Importance regions for selected gene and cell type"),
+          h3("Feature Importance regions for selected gene and biological group"),
           plotOutput("shap_barplot", height = "350px"),
 
           h4("Feature Importance table"),
