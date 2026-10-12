@@ -321,7 +321,7 @@ assign_corr_class <- function(df, corr_metric = "test_Pearson", low_cut = 0.3, h
     mutate(
       corr_value_for_class = suppressWarnings(as.numeric(as.character(.data[[corr_metric]]))),
       corr_class = case_when(
-        is.na(corr_value_for_class) ~ "failed",
+        is.na(corr_value_for_class) | corr_value_for_class <= 0 ~ "failed",
         corr_value_for_class < low_cut ~ "low",
         corr_value_for_class < high_cut ~ "medium",
         TRUE ~ "high"
@@ -4500,27 +4500,34 @@ server <- function(input, output, session) {
     result
   }
   
+  
   run_pastaa_for_gene_ct_direction <- function(gene, ct, direction,
                                              n_regions = 500,
                                              run_mode = "gene",
                                              use_abs_shap = FALSE,
                                              filter_performance = TRUE,
                                              performance_metric = default_test_column,
-                                             min_test_correlation = 0.2) {
+                                             min_test_correlation = 0.2,
+                                             prepared_region_df = NULL) {
 
     message("Running PASTAA: ", gene, " | ", ct, " | ", direction, " | mode=", run_mode)
 
-    region_df <- prepare_pastaa_regions(
-      gene = gene,
-      ct = ct,
-      direction = direction,
-      n_regions = n_regions,
-      run_mode = run_mode,
-      use_abs_shap = use_abs_shap,
-      filter_performance = filter_performance,
-      performance_metric = performance_metric,
-      min_test_correlation = min_test_correlation
-    )
+    region_df <- prepared_region_df
+
+    if (is.null(region_df)) {
+      region_df <- prepare_pastaa_regions(
+        gene = gene,
+        ct = ct,
+        direction = direction,
+        n_regions = n_regions,
+        run_mode = run_mode,
+        use_abs_shap = use_abs_shap,
+        filter_performance = filter_performance,
+        performance_metric = performance_metric,
+        min_test_correlation = min_test_correlation
+      )
+    }
+
 
     if (is.null(region_df) || nrow(region_df) == 0) {
       stop("No regions found for ", ct, " / ", direction)
@@ -4553,14 +4560,17 @@ server <- function(input, output, session) {
       "corrNA"
     }
 
+    
     if (identical(run_mode, "gene")) {
 
       run_id <- paste(
         gene_safe,
+        ct_safe,
         direction,
         paste0("n", n_regions),
         sep = "_"
       )
+
 
     } else {
 
@@ -4577,10 +4587,7 @@ server <- function(input, output, session) {
         )
       }
 
-      run_id <- paste(
-        run_id_parts,
-        collapse = "_"
-      )
+      
 
       run_id <- paste(
         run_id_parts,
@@ -9112,26 +9119,33 @@ server <- function(input, output, session) {
       )
     )
 
+    
     out <- list()
     errors <- character(0)
 
-    withProgress(message = "Running PASTAA", value = 0, {
-      total <- length(selected_cts) * length(directions)
-      k <- 0
+    # PHASE 1: Prepare regions in the main Shiny process
 
-      for (ct in selected_cts) {
-        for (direction in directions) {
-          k <- k + 1
+    tasks <- unlist(lapply(selected_cts, function(ct) {
+      lapply(directions, function(direction) {
+        list(ct = ct, direction = direction)
+      })
+    }), recursive = FALSE)
 
-          
+    total <- length(tasks)
+    prepared_tasks <- list()
 
-          
+    withProgress(
+      message = "Preparing TF enrichment regions",
+      value = 0,
+      {
+        for (i in seq_along(tasks)) {
+          task <- tasks[[i]]
 
-          res <- tryCatch(
-            run_pastaa_for_gene_ct_direction(
+          regions <- tryCatch(
+            prepare_pastaa_regions(
               gene = gene,
-              ct = ct,
-              direction = direction,
+              ct = task$ct,
+              direction = task$direction,
               n_regions = n_regions,
               run_mode = run_mode,
               use_abs_shap = use_abs_shap,
@@ -9142,19 +9156,168 @@ server <- function(input, output, session) {
             error = function(e) e
           )
 
+          if (inherits(regions, "error")) {
+            errors <- c(
+              errors,
+              paste(
+                task$ct,
+                task$direction,
+                ":",
+                conditionMessage(regions)
+              )
+            )
+
+          } else if (is.null(regions) || nrow(regions) == 0L) {
+            errors <- c(
+              errors,
+              paste(task$ct, task$direction, ": no regions")
+            )
+
+          } else {
+            task$regions <- regions
+            prepared_tasks[[length(prepared_tasks) + 1L]] <- task
+          }
+
           incProgress(
             1 / total,
-            detail = paste(gene_label, ct, direction)
+            detail = paste(task$ct, task$direction)
           )
-
-          if (inherits(res, "error")) {
-            errors <- c(errors, paste(ct, direction, ":", res$message))
-          } else {
-            out[[res$run_id]] <- res
-          }
         }
       }
-    })
+    )
+
+    # PHASE 2: Determine number of parallel workers
+
+    env_cores <- suppressWarnings(
+      as.integer(Sys.getenv("EPIVOI_PASTAA_CORES", ""))
+    )
+
+    detected <- suppressWarnings(
+      parallel::detectCores(logical = TRUE)
+    )
+
+    if (!is.finite(detected) || detected < 1L) {
+      detected <- 1L
+    }
+
+    requested_cores <- if (
+      length(env_cores) == 1L &&
+      is.finite(env_cores) &&
+      env_cores >= 1L
+    ) {
+      env_cores
+    } else {
+      max(1L, floor(detected / 2L))
+    }
+
+    n_workers <- min(
+      length(prepared_tasks),
+      requested_cores
+    )
+
+    parallel_enabled <- (
+      .Platform$OS.type == "unix" &&
+      n_workers > 1L
+    )
+
+    # PHASE 3: Define independent PASTAA job
+
+    run_one_task <- function(task) {
+      tryCatch(
+        run_pastaa_for_gene_ct_direction(
+          gene = gene,
+          ct = task$ct,
+          direction = task$direction,
+          n_regions = n_regions,
+          run_mode = run_mode,
+          use_abs_shap = use_abs_shap,
+          filter_performance = filter_performance,
+          performance_metric = performance_metric,
+          min_test_correlation = min_test_correlation,
+          prepared_region_df = task$regions
+        ),
+        error = function(e) {
+          structure(
+            list(
+              message = conditionMessage(e),
+              ct = task$ct,
+              direction = task$direction
+            ),
+            class = "epivoi_pastaa_error"
+          )
+        }
+      )
+    }
+
+    # PHASE 4: Execute independent PASTAA jobs
+
+    if (length(prepared_tasks) > 0L) {
+
+      pastaa_status_msg(
+        paste0(
+          "Running ",
+          length(prepared_tasks),
+          " PASTAA job(s) using ",
+          if (parallel_enabled) n_workers else 1L,
+          " worker(s)."
+        )
+      )
+
+      job_results <- if (parallel_enabled) {
+        parallel::mclapply(
+          prepared_tasks,
+          run_one_task,
+          mc.cores = n_workers,
+          mc.preschedule = FALSE,
+          mc.set.seed = TRUE
+        )
+      } else {
+        lapply(prepared_tasks, run_one_task)
+      }
+
+      # PHASE 5: Collect results in the main Shiny process
+
+      for (i in seq_along(job_results)) {
+
+        res <- job_results[[i]]
+        task <- prepared_tasks[[i]]
+
+        if (
+          inherits(res, "epivoi_pastaa_error") ||
+          inherits(res, "try-error") ||
+          !is.list(res) ||
+          is.null(res$run_id)
+        ) {
+
+          err <- if (
+            is.list(res) && !is.null(res$message)
+          ) {
+            res$message
+          } else {
+            as.character(res)[1]
+          }
+
+          errors <- c(
+            errors,
+            paste(task$ct, task$direction, ":", err)
+          )
+
+        } else {
+
+          out[[res$run_id]] <- res
+
+          current_results <- pastaa_results()
+          current_results[[res$run_id]] <- res
+          pastaa_results(current_results)
+
+          message(
+            "PASTAA result stored: ",
+            res$run_id
+          )
+        }
+      }
+    }
+
 
     previous_results <- pastaa_results()
 
@@ -9627,13 +9790,18 @@ server <- function(input, output, session) {
           values = c(
             "pos" = "#D55E00",
             "neg" = "#0072B2"
+          ),
+          breaks = c("pos", "neg"),
+          labels = c(
+            "Positive Feature Importance",
+            "Negative Feature Importance"
           )
         ) +
         labs(
           x = "Metadata group",
           y = "TF",
           size = "-log10(q-value / BH FDR)",
-          colour = "Feature Importance direction",
+          colour = "Feature Importance",
           title = paste0(
             "Top enriched TFs by group, top ",
             top_n,
@@ -9960,8 +10128,16 @@ server <- function(input, output, session) {
 
 
   output$pastaa_abs_dotplot <- renderPlot({
-
     df <- pastaa_summary_df()
+
+    shiny::validate(
+      shiny::need(
+        !is.null(df) &&
+          nrow(df) > 0 &&
+          any(df$direction == "abs", na.rm = TRUE),
+        "Run TF enrichment with Absolute Feature Importance to display this plot."
+      )
+    )
 
     make_pastaa_abs_dotplot(
       df = df,
