@@ -442,9 +442,9 @@ EpIVoi maps TF names to available motifs and adds successful FIMO predictions to
 * **Top saved PASTAA TFs to show in FIMO** sets the number of saved PASTAA TFs used when the saved source is selected.
 * **Replace previous FIMO tracks** determines whether previous predictions are replaced.
 
-#### Current FIMO settings
+#### Default FIMO settings
 
-The current implementation calls FIMO with:
+The default implementation calls FIMO with:
 
 * **Motif pseudocount:** `0.1`
 * **Significance threshold:** `1e-4`
