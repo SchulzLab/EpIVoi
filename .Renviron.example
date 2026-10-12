@@ -1,0 +1,28 @@
+# EpIVoi configuration
+# Copy this file to .Renviron and adapt paths to your installation.
+
+# Chromosome 21 example object
+# First run: Rscript scripts/prepare_chr21_example.R
+EPIVOI_OBJECT_PATH=epivoi_object/data/epivoi_chr21_local.rds
+
+# Reference annotations and genome
+EPIVOI_REFSEQ_FILE=/path/to/ncbiRefSeq.txt.gz
+EPIVOI_GENOME_FASTA=/path/to/hg38.fa
+
+# IGV.js assets
+EPIVOI_IGV_ASSETS_DIR=/path/to/igv
+
+# TRAP and PASTAA
+EPIVOI_TRAP_BIN=/path/to/TRAP
+EPIVOI_PASTAA_BIN=/path/to/PASTAA
+EPIVOI_PASTAA_ENERGY_MATRIX=/path/to/energy_matrix.txt
+EPIVOI_PASTAA_CORES=4
+
+# FIMO and MEME Suite
+EPIVOI_FIMO_BIN=/path/to/fimo
+EPIVOI_FASTA_GET_MARKOV_BIN=/path/to/fasta-get-markov
+EPIVOI_MEME_MOTIF_FILE=/path/to/motifs.meme
+EPIVOI_FIMO_ENCODE_BG=/path/to/background.txt
+
+# Optional Regulatory Build BED
+# EPIVOI_REGULATORY_BUILD_BED=/path/to/regulatory_build.bed

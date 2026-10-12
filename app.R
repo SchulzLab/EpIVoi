@@ -79,9 +79,14 @@ if (!file.exists(viz_obj_path)) {
     "\nor set EPIVOI_OBJECT_PATH."
   )
 }
-
 viz_obj <- tryCatch(
-  readRDS(viz_obj_path),
+  {
+    obj <- readRDS(viz_obj_path)
+    attr(obj, "object_dir") <- dirname(
+      normalizePath(viz_obj_path, mustWork = TRUE)
+    )
+    obj
+  },
   error = function(e) {
     stop(
       "Could not load EpIVoi object from ",
@@ -91,6 +96,40 @@ viz_obj <- tryCatch(
     )
   }
 ) 
+
+
+# Resolve relative input paths against the RDS location.
+resolve_example_paths <- function(index, object_dir) {
+  paths <- as.character(index$file_path)
+
+  is_absolute <- grepl(
+    "^(/|~|[A-Za-z]:[/\\\\])",
+    paths
+  )
+
+  paths[!is_absolute] <- file.path(
+    object_dir,
+    paths[!is_absolute]
+  )
+
+  index$file_path <- path.expand(paths)
+  index
+}
+
+object_dir <- dirname(normalizePath(viz_obj_path))
+
+viz_obj$feature_importance$file_index <-
+  resolve_example_paths(
+    viz_obj$feature_importance$file_index,
+    object_dir
+  )
+
+viz_obj$epigenetic_signal$file_index <-
+  resolve_example_paths(
+    viz_obj$epigenetic_signal$file_index,
+    object_dir
+  )
+
 
 # Error metric label used for user-facing text. Older objects without this
 # field remain supported and use a generic fallback label.
@@ -6398,6 +6437,7 @@ server <- function(input, output, session) {
 
     viz_obj_path <- "', viz_obj_path, '"
     viz_obj <- readRDS(viz_obj_path)
+    attr(viz_obj, "object_dir") <- dirname(normalizePath(viz_obj_path))
 
     # EpIVoi object helper functions
     source("viz_obj_helpers.R")
