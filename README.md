@@ -86,9 +86,9 @@ A detailed walkthrough with matching screenshots is available in [`docs/toy_exam
 
 EpIVoi operates on outputs from gene-specific prediction models and does not perform model training.
 
-### EpIVoi visualization object
+### EpIVoi object
 
-The main application input is an RDS visualization object.
+The main application input is an RDS object.
 
 The object contains or references the data required by the enabled modules.
 
