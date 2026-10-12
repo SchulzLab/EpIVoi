@@ -1,0 +1,6 @@
+#/Lambda=0.7 /Regression_slope=0.6 /Regression_intercept=-6 /Entropy_core_cutoff=0.1 /Entropy_general_cutoff=0.1 /GC_content=0.5
+>EXAMPLE_TF  lnR0: 0.6
+0.1	1.2	0.4	0.0
+0.5	0.2	1.1	0.3
+1.0	0.0	0.2	0.7
+0.2	0.8	0.5	0.1
