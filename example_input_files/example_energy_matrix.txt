@@ -1,6 +1,13 @@
-#/Lambda=0.7 /Regression_slope=0.6 /Regression_intercept=-6 /Entropy_core_cutoff=0.1 /Entropy_general_cutoff=0.1 /GC_content=0.5
->EXAMPLE_TF  lnR0: 0.6
-0.1	1.2	0.4	0.0
-0.5	0.2	1.1	0.3
-1.0	0.0	0.2	0.7
-0.2	0.8	0.5	0.1
+#/Lambda=0.7	/Regression_slope=0.6	/Regression_intercept=-6	/Entropy_core_cutoff=0.1	/Entropy_general_cutoff=0.1	/GC_content=0.5	/Pseudocount=maximal_row_counts/counts_in_row
+>RUNX1	lnR0: 0.6
+0.124302	1.98042	1.56945	0
+0	2.09477	2.674	0.114347
+1.56945	0.898012	2.87843	0
+3.60818	3.60818	4.59839	0
+2.97063	4.54008	0	3.54987
+2.478	0.908555	4.04745	0
+4.70834	4.70834	0	4.70834
+4.70834	4.70834	0	4.70834
+4.65442	3.66421	4.65442	0
+0.908555	2.478	4.04745	0
+0	2.20064	1.47088	0.799451

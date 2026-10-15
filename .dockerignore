@@ -1,0 +1,33 @@
+.git
+.gitignore
+.Renviron
+.Rhistory
+.RData
+.Rproj.user
+*.backup
+*.log
+*.pdf
+*.png
+*.rds
+*.fa
+*.fa.gz
+*.bed
+*.bed.gz
+*.tsv.gz
+*.txt.gz
+example_input_files/
+epivoi_object/data/
+docker_data/
+docker_resources/
+docker_bin/
+.nfs*
+
+# Generated analysis outputs
+tf_pastaa_app_files/
+fimo/
+shap_bw/
+
+# Local files and backups
+*.backup
+*.backup.*
+*.bak

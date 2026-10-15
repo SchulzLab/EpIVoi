@@ -702,7 +702,7 @@ genes_from_obj <- strip_ensembl_version(genes_from_obj)
 
 gene_map <- make_gene_mapping_from_gtf(gtf_df, genes_from_obj)
 
-`%||%` <- function(a, b) if (!is.null(a) && length(a) > 0 && !is.na(a)) a else b
+`%||%` <- function(a, b) if (!is.null(a) && length(a) > 0 && !all(is.na(a))) a else b
 
 symbol2id <- setNames(
   gene_map$gene_id,
