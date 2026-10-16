@@ -125,3 +125,45 @@ may finish without statistically significant results.
 
 The full Docker workflow was tested on Apple Silicon using
 Linux/amd64 emulation. Server deployment remains to be validated.
+
+## Gene Features in Overview
+
+EpIVoi provides four additional violin plots in the Overview tab:
+
+- Number of TSSs
+- Total exon length (bp)
+- Gene length (bp)
+- Gene density (number of neighboring genes within ±500 kb)
+
+Gene features are calculated from the full GTF annotation using
+FuFis (GTF_Processing.gene_feature_table).
+
+The feature table is precomputed, so FuFis and Python are not
+required when running the Shiny application.
+
+### Prepare the feature CSV
+
+For the provided chromosome 21 object, the feature CSV is located at:
+
+    epivoi_object/data/epivoi_obj_cre_rf_IHEC_1MB_test_performance_chr21_complete_gtf.gene_features.csv
+
+EpIVoi automatically searches for a CSV with the same basename
+as the loaded RDS, followed by `.gene_features.csv`.
+
+Alternatively, set EPIVOI_GENE_FEATURES_CSV to the appropriate CSV path.
+
+### Docker
+
+When using the chr21 object with the default Docker configuration,
+copy the corresponding feature table to:
+
+    docker_data/object.gene_features.csv
+
+The application will automatically load it alongside
+`docker_data/object.rds`.
+
+For other datasets, compute a separate feature table from their
+corresponding GTF annotation.
+
+If a compatible feature table is unavailable, the rest of
+EpIVoi remains usable.

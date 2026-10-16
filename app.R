@@ -729,6 +729,60 @@ perf_df <- perf_df |>
   ) |>
   dplyr::relocate(gene_id, gene_symbol)
 
+
+# ===== Gene features computed using FuFis ===============================
+
+gene_features_path <- Sys.getenv("EPIVOI_GENE_FEATURES_CSV", unset = "")
+
+# If no explicit CSV is configured, search next to the loaded RDS.
+if (!nzchar(gene_features_path)) {
+  gene_features_path <- paste0(
+    tools::file_path_sans_ext(normalizePath(viz_obj_path)),
+    ".gene_features.csv"
+  )
+}
+
+gene_features_df <- NULL
+
+if (file.exists(gene_features_path)) {
+  feature_tmp <- tryCatch(
+    read.csv(
+      gene_features_path,
+      check.names = FALSE,
+      stringsAsFactors = FALSE
+    ),
+    error = function(e) {
+      warning("Cannot load gene features CSV: ", conditionMessage(e))
+      NULL
+    }
+  )
+
+  required_feature_cols <- c(
+    "Ensembl ID", "#TSS", "Exons length",
+    "Gene length", "Gene density"
+  )
+
+  if (!is.null(feature_tmp)) {
+    if (!all(required_feature_cols %in% names(feature_tmp))) {
+      warning("Gene features CSV has missing required columns.")
+    } else {
+      feature_tmp$gene_id <- sub(
+        "\\.[0-9]+$", "", as.character(feature_tmp[["Ensembl ID"]])
+      )
+
+      gene_features_df <- feature_tmp
+      message(
+        "Loaded gene features: ",
+        nrow(gene_features_df),
+        " genes from ",
+        gene_features_path
+      )
+    }
+  }
+} else {
+  message("No gene features CSV found for this object: ", gene_features_path)
+}
+
 igv_gene_list <- sort(unique(na.omit(gene_map$gene_symbol_display)))
 
 
@@ -1462,6 +1516,32 @@ ui <- tagList(
           plotOutput("class_barplot", height = "280px"),
           downloadButton("download_class_barplot_pdf", "Download class barplot as PDF"),
 
+          br(),
+          br(),
+          h4("Gene features by correlation class"),
+          tags$p(
+            "Gene features computed from the GTF using FuFis (±500 kb for gene density)."
+          ),
+          fluidRow(
+            column(6,
+              plotOutput("gene_feature_tss", height = "300px"),
+              downloadButton("download_gene_feature_tss", "Download PDF")
+            ),
+            column(6,
+              plotOutput("gene_feature_exon", height = "300px"),
+              downloadButton("download_gene_feature_exon", "Download PDF")
+            )
+          ),
+          fluidRow(
+            column(6,
+              plotOutput("gene_feature_length", height = "300px"),
+              downloadButton("download_gene_feature_length", "Download PDF")
+            ),
+            column(6,
+              plotOutput("gene_feature_density", height = "300px"),
+              downloadButton("download_gene_feature_density", "Download PDF")
+            )
+          ),
           br(),
           br(),
           h4("Performance table"),
@@ -3091,6 +3171,98 @@ server <- function(input, output, session) {
       theme_bw(base_size = 14)
   }
 
+
+  gene_features_overview <- reactive({
+    shiny::validate(
+      shiny::need(
+        !is.null(gene_features_df),
+        "Gene features are not configured for this object."
+      )
+    )
+
+    df <- perf_overview_filtered()
+
+    df <- dplyr::left_join(
+      df,
+      gene_features_df,
+      by = "gene_id"
+    )
+
+    df
+  })
+
+  gene_feature_specs <- list(
+    tss = list(column = "#TSS", label = "Number of TSSs"),
+    exon = list(column = "Exons length", label = "Exon length (bp)"),
+    length = list(column = "Gene length", label = "Gene length (bp)"),
+    density = list(column = "Gene density", label = "Gene density (±500 kb)")
+  )
+
+  make_gene_feature_plot <- function(feature_key) {
+    spec <- gene_feature_specs[[feature_key]]
+    df <- gene_features_overview()
+
+    df$feature_value <- suppressWarnings(
+      as.numeric(df[[spec$column]])
+    )
+
+    df <- df[is.finite(df$feature_value), , drop = FALSE]
+
+    shiny::validate(
+      shiny::need(nrow(df) > 0, "No gene feature values available.")
+    )
+
+    df$corr_class <- factor(
+      as.character(df$corr_class),
+      levels = corr_levels
+    )
+
+    ggplot(
+      df,
+      aes(x = corr_class, y = feature_value, fill = corr_class)
+    ) +
+      geom_violin(
+        alpha = 0.65,
+        na.rm = TRUE,
+        trim = FALSE
+      ) +
+      geom_boxplot(
+        width = 0.13,
+        outlier.size = 0.7,
+        alpha = 0.8,
+        na.rm = TRUE
+      ) +
+      scale_x_discrete(limits = corr_levels, drop = FALSE) +
+      scale_fill_manual(
+        values = corr_colors_active(),
+        drop = FALSE
+      ) +
+      labs(
+        title = spec$label,
+        x = "Correlation class",
+        y = spec$label,
+        fill = "Correlation class"
+      ) +
+      theme_bw(base_size = 12) +
+      theme(legend.position = "none")
+  }
+
+  output$gene_feature_tss <- renderPlot({
+    make_gene_feature_plot("tss")
+  })
+
+  output$gene_feature_exon <- renderPlot({
+    make_gene_feature_plot("exon")
+  })
+
+  output$gene_feature_length <- renderPlot({
+    make_gene_feature_plot("length")
+  })
+
+  output$gene_feature_density <- renderPlot({
+    make_gene_feature_plot("density")
+  })
+
   output$dist_plot <- renderPlot({
     make_dist_plot()
   })
@@ -3115,6 +3287,26 @@ server <- function(input, output, session) {
     print(p)
 
     grDevices::dev.off()
+  }
+
+
+  for (feature_key in names(gene_feature_specs)) {
+    local({
+      key <- feature_key
+      output[[paste0("download_gene_feature_", key)]] <- downloadHandler(
+        filename = function() {
+          paste0("gene_feature_", key, ".pdf")
+        },
+        content = function(file) {
+          save_plot_pdf(
+            file,
+            function() make_gene_feature_plot(key),
+            width = 7,
+            height = 5
+          )
+        }
+      )
+    })
   }
 
   output$download_dist_plot_pdf <- downloadHandler(

@@ -274,3 +274,23 @@ The repository screenshot directory is [`docs/screenshots/`](docs/screenshots/).
 ## License
 
 Consult the repository for the applicable license and distribution terms. Do not assume a license if none has been selected.
+
+## Gene Features in Overview
+
+The Overview tab includes four violin plots comparing gene features
+across correlation classes (failed, low, medium and high):
+
+- Number of transcription start sites (TSSs)
+- Total exon length
+- Gene length
+- Gene density (±500 kb around the TSS)
+
+Gene features were calculated using
+[FuFis](https://github.com/DennisHeck/FuFis),
+specifically `GTF_Processing.gene_feature_table()`.
+
+The plots follow the existing correlation thresholds and class filters,
+support PDF downloads, and use the gene feature table associated with
+the loaded EpIVoi object.
+
+See [DOCKER_SETUP.md](DOCKER_SETUP.md) for configuration details.
