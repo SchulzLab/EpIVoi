@@ -21,4 +21,5 @@ dependencies:
   - r-htmltools
   - r-rjson
   - bedtools
+  - samtools
   - meme

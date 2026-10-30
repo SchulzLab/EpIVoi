@@ -3,24 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    platform: linux/amd64  # TRAP and PASTAA provided by the lab are x86-64 binaries
+    platform: linux/amd64
     ports:
-      - "127.0.0.1:3838:3838"
-    volumes:
-      - ./docker_data:/data:ro
-      - ./docker_resources:/resources:ro
-      - ./docker_bin:/opt/epivoi/bin:ro
+      - "127.0.0.1:3839:3838"
     environment:
-      EPIVOI_OBJECT_PATH: ${EPIVOI_OBJECT_PATH:-/data/object.rds}
-      EPIVOI_REFSEQ_FILE: ${EPIVOI_REFSEQ_FILE:-/resources/ncbiRefSeq.txt.gz}
-      EPIVOI_GENOME_FASTA: ${EPIVOI_GENOME_FASTA:-/resources/hg38.fa}
-      EPIVOI_IGV_ASSETS_DIR: ${EPIVOI_IGV_ASSETS_DIR:-/resources/igv}
-      EPIVOI_TRAP_BIN: /opt/epivoi/bin/TRAP
-      EPIVOI_PASTAA_BIN: /opt/epivoi/bin/PASTAA
-      EPIVOI_PASTAA_ENERGY_MATRIX: ${EPIVOI_PASTAA_ENERGY_MATRIX:-/resources/energy_matrix.txt}
-      EPIVOI_MEME_MOTIF_FILE: ${EPIVOI_MEME_MOTIF_FILE:-/resources/motifs.meme}
-      EPIVOI_FIMO_BIN: /opt/conda/bin/fimo
-      EPIVOI_FASTA_GET_MARKOV_BIN: /opt/conda/bin/fasta-get-markov
-      EPIVOI_FIMO_ENCODE_BG: ${EPIVOI_FIMO_ENCODE_BG:-/resources/background.txt}
-      EPIVOI_PASTAA_CORES: ${EPIVOI_PASTAA_CORES:-2}
-      # Optional: EPIVOI_REGULATORY_BUILD_BED=/resources/regulatory_build.bed
+      EPIVOI_PASTAA_CORES: "2"

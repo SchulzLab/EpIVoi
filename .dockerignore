@@ -31,3 +31,26 @@ shap_bw/
 *.backup
 *.backup.*
 *.bak
+
+# Include the complete preconfigured example and Docker resources.
+!example_input_files/
+!example_input_files/**
+!docker_example/
+!docker_example/**
+
+# Rebuild the expanded FASTA and its index inside Docker.
+example_input_files/*.fa
+example_input_files/*.fa.fai
+
+# Exclude backup copies.
+*.before_ready_example
+
+# Explicitly include all bundled example inputs
+!example_input_files/
+!example_input_files/**
+!docker_example/
+!docker_example/**
+
+# The expanded genome and index are generated during image build
+example_input_files/example_genome_sparse.fa
+example_input_files/example_genome_sparse.fa.fai

@@ -3232,7 +3232,7 @@ server <- function(input, output, session) {
         alpha = 0.8,
         na.rm = TRUE
       ) +
-      scale_x_discrete(limits = corr_levels, drop = FALSE) +
+      scale_x_discrete(drop = TRUE) +
       scale_fill_manual(
         values = corr_colors_active(),
         drop = FALSE

@@ -1,169 +1,89 @@
-# Docker deployment (full EpIVoi application)
+# EpIVoi Docker Setup
 
-This configuration packages the full Shiny application and the MEME Suite utilities (`fimo`, `fasta-get-markov`). It does **not** bundle the lab-specific TRAP/PASTAA executables, private reference files or user datasets.
+## Quick Start
 
-## Prerequisites
+EpIVoi includes a ready-to-run Docker example with nine gene models,
+two biological groups, reference annotations, and TF analysis resources.
 
-- Docker Engine + Compose plugin, or Docker Desktop.
-- Linux/amd64 support (Apple Silicon uses emulation).
-- Permission to use and distribute the chosen TF binaries and data.
+The example requires no manual preparation of input files.
 
-## Prepare inputs
+### Requirements
 
-Create `docker_data`, `docker_resources`, `docker_bin` beside `compose.yaml`.
+- Docker Engine with Docker Compose, or Docker Desktop
+- Support for Linux/amd64 containers
 
-- Put a **compatible EpIVoi RDS** at `docker_data/object.rds`, or point `EPIVOI_OBJECT_PATH` to another path **inside the container**, for example `/data/myobject.rds`.
-- Put each referenced SHAP and epigenetic signal file into the mounted data tree. Ensure the RDS `file_index$file_path` entries resolve under the runtime `object_dir` (for relative paths) or as valid absolute container paths. Paths from the host (such as `/projects/...`) are not usable unless explicitly bind-mounted to the same location.
-- Put `hg38.fa`, `ncbiRefSeq.txt.gz`, `energy_matrix.txt` and `motifs.meme` in `docker_resources` (or change the environment mappings). The optional `background.txt` is required only for the corresponding FIMO ENCODE configuration, which has not yet been validated.
-- Put your licensed `TRAP` and `PASTAA` Linux/amd64 executables in `docker_bin` and mark them executable (`chmod +x docker_bin/{TRAP,PASTAA}`).
-- Put IGV assets in `docker_resources/igv` with filenames expected by `app.R`.
-- Optionally add regulatory build data and set `EPIVOI_REGULATORY_BUILD_BED` in Compose.
+### Run the Example
 
-Files required for specific modules can be omitted if those modules are intentionally unused **only if** `app.R` permits startup without them.
+Clone the repository and switch to the development branch:
 
-## Start
+```bash
+git clone https://github.com/SchulzLab/EpIVoi.git
+cd EpIVoi
+git checkout aleksandra-epivoi-updates
+Build and start the application:
+docker compose up --build
 
-```sh
-docker compose build
-docker compose up
-```
 
-Then visit http://localhost:3838 on the machine running Docker. Stop using `docker compose down`.
+Open http://localhost:3838 in your browser.
 
-The default Compose configuration binds the application to `127.0.0.1:3838`. When Docker runs on a remote server, use an SSH tunnel or another approved access method. To use another local port, change the left-hand port in `compose.yaml`, for example `127.0.0.1:3839:3838`.
+To stop the application:
+docker compose down
 
-### FASTA index
 
-Before running PASTAA or FIMO, ensure that `docker_resources/hg38.fa.fai` exists and matches the reference genome. The `/resources` volume is mounted read-only, so bedtools cannot create this index inside the running application container.
+The Docker build automatically extracts the bundled sparse reference
+FASTA and creates its index.
+Included Example
+All example input data are located in example_input_files/.
 
-If the index is missing, it can be generated using the built Docker image:
+The dataset includes nine gene models and two biological groups:
+- Astrocytes:Alzheimer's
+- Astrocytes:Unaffected
+The example provides gene-specific feature importance and epigenetic
+signal matrices, RefSeq annotations, a sparse hg38 reference, a TRAP
+energy matrix, and a small MEME motif collection.
 
-```sh
-docker compose build
-docker compose run --rm --no-deps --user root \
-  --entrypoint /opt/conda/bin/bedtools \
-  -v "$PWD/docker_resources:/index_resources" \
-  epivoi getfasta \
-  -fi /index_resources/hg38.fa \
-  -bed /dev/null \
-  -fo /tmp/index_test.fa
-Verify that docker_resources/hg38.fa.fai was created. Then start the application with docker compose up -d.
-Functional validation
-Open EpIVoi, load a compatible gene and biological group in IGV, run PASTAA, then use the saved PASTAA TFs to run FIMO. The full pipeline was successfully tested on an Apple Silicon Mac using Linux/amd64 emulation. The ENCODE-specific FIMO configuration has not been validated.
+TRAP, PASTAA, and IGV.js assets are included in docker_example/.
+FIMO and other required runtime dependencies are installed during
+the Docker build.
 
-## Verify inside the container
+The sparse reference preserves the original hg38 sequences at selected
+genomic positions, while other positions are filled with N. It is not
+a replacement for the complete hg38 reference genome.
 
-```sh
-docker compose run --rm epivoi Rscript -e 'library(shiny); library(data.table); cat("R runtime OK\n")'
-docker compose run --rm epivoi fimo --version
-docker compose run --rm epivoi fasta-get-markov --version
-```
+The example motif collection is intentionally small. PASTAA results
+may not pass the default BH FDR threshold. To explore the PASTAA-to-FIMO
+workflow with this demonstration dataset, a less restrictive cutoff
+may be selected before running PASTAA.
 
-## Limitations
+The example is intended to demonstrate application functionality,
+not to establish biological findings.
+Using Your Own Data
+The default Docker configuration runs the bundled example.
 
-- The Docker image and the IGV, TRAP, PASTAA and FIMO workflow were tested successfully on an Apple Silicon Mac using Linux/amd64 emulation. Deployment on the lab servers has not yet been tested.
-- A container is only fully portable if input paths and referenced files are accessible inside it. The example chromosome 21 preprocessing script can help adapt its own data, but does not automatically adapt other RDS objects.
-- Large genomes and model data stay on host mounts and are not included in a publicly distributed image.
+For another dataset, provide a compatible EpIVoi RDS object together
+with its referenced feature importance and epigenetic signal files,
+genome reference, annotations, and TF resources.
 
-## Running Docker with the example dataset
+Mount these files into the container using a Docker Compose override
+and configure the corresponding EPIVOI_* environment variables.
 
-The repository includes a small example dataset with nine genes and
-two biological groups. This allows testing without the full model object.
+Paths recorded in the RDS file indices must be accessible from inside
+the container.
 
-### 1. Prepare the sparse reference
+For Gene Features in Overview, provide a matching precomputed CSV next
+to the RDS using the .gene_features.csv sidecar naming convention,
+or configure EPIVOI_GENE_FEATURES_CSV.
 
-From the repository root:
+The bundled nine-gene example does not currently include a matching
+Gene Features CSV. The remaining Overview functionality is available.
 
-    gzip -dkf example_input_files/example_genome_sparse.fa.gz
-    samtools faidx example_input_files/example_genome_sparse.fa
+See README.md for the object format and module descriptions.
+Platform and Testing
+The Docker application was built and launched successfully on an
+Apple Silicon Mac using Linux/amd64 emulation.
 
-The uncompressed reference occupies approximately 540 MB.
+IGV and the TRAP/PASTAA workflow were tested with the included
+example. Loading saved PASTAA TFs for downstream FIMO analysis
+was also tested.
 
-### 2. Prepare the Docker inputs
-
-Run from the repository root:
-
-    mkdir -p docker_data docker_resources docker_bin
-
-    cp example_input_files/example_epivoi_object.rds docker_data/object.rds
-    cp -r example_input_files/feature_importance docker_data/
-    cp -r example_input_files/epigenetic_signal docker_data/
-
-    cp example_input_files/example_ncbiRefSeq.txt.gz docker_resources/ncbiRefSeq.txt.gz
-    cp example_input_files/example_genome_sparse.fa docker_resources/hg38.fa
-    cp example_input_files/example_genome_sparse.fa.fai docker_resources/hg38.fa.fai
-    cp example_input_files/example_energy_matrix.txt docker_resources/energy_matrix.txt
-    cp example_input_files/example_motifs.meme docker_resources/motifs.meme
-
-Provide the lab-specific TRAP and PASTAA Linux/amd64 executables:
-
-    cp /path/to/TRAP docker_bin/TRAP
-    cp /path/to/PASTAA docker_bin/PASTAA
-    chmod +x docker_bin/TRAP docker_bin/PASTAA
-
-Replace /path/to/ with the actual binary locations.
-
-Also provide the required IGV.js assets in docker_resources/igv/.
-
-### 3. Build and start
-
-    docker compose build
-    docker compose up -d
-
-Open http://localhost:3838 on the Docker host.
-
-For a remote server, use SSH port forwarding or another
-approved access method.
-
-### 4. Validate
-
-Load a gene from the example dataset, inspect its feature importance
-and epigenetic tracks, then test PASTAA and FIMO.
-
-The example motif file contains only RUNX1. Therefore, enrichment
-may finish without statistically significant results.
-
-The full Docker workflow was tested on Apple Silicon using
-Linux/amd64 emulation. Server deployment remains to be validated.
-
-## Gene Features in Overview
-
-EpIVoi provides four additional violin plots in the Overview tab:
-
-- Number of TSSs
-- Total exon length (bp)
-- Gene length (bp)
-- Gene density (number of neighboring genes within ±500 kb)
-
-Gene features are calculated from the full GTF annotation using
-FuFis (GTF_Processing.gene_feature_table).
-
-The feature table is precomputed, so FuFis and Python are not
-required when running the Shiny application.
-
-### Prepare the feature CSV
-
-For the provided chromosome 21 object, the feature CSV is located at:
-
-    epivoi_object/data/epivoi_obj_cre_rf_IHEC_1MB_test_performance_chr21_complete_gtf.gene_features.csv
-
-EpIVoi automatically searches for a CSV with the same basename
-as the loaded RDS, followed by `.gene_features.csv`.
-
-Alternatively, set EPIVOI_GENE_FEATURES_CSV to the appropriate CSV path.
-
-### Docker
-
-When using the chr21 object with the default Docker configuration,
-copy the corresponding feature table to:
-
-    docker_data/object.gene_features.csv
-
-The application will automatically load it alongside
-`docker_data/object.rds`.
-
-For other datasets, compute a separate feature table from their
-corresponding GTF annotation.
-
-If a compatible feature table is unavailable, the rest of
-EpIVoi remains usable.
+Deployment on the laboratory servers has not been tested.

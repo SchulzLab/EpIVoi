@@ -6,6 +6,24 @@ The application is designed for exploration and hypothesis generation. It does n
 
 The main modules are **Performance Overview**, **Feature Importance**, **Genome Browser** and **Transcription Factor Enrichment**, as presented in the accompanying EpIVoi manuscript. The interface also includes a dedicated Train vs Test view, Reproducibility and Help.
 
+## Docker Quick Start
+
+The development branch includes a ready-to-run Docker example with nine genes.
+
+```bash
+git clone https://github.com/SchulzLab/EpIVoi.git
+cd EpIVoi
+git checkout aleksandra-epivoi-updates
+docker compose up --build
+```
+
+Open http://localhost:3838 in your browser.
+
+No manual preparation of Docker inputs is required.
+See [DOCKER_SETUP.md](DOCKER_SETUP.md) for detailed instructions.
+
+The following instructions describe installation outside Docker.
+
 ## Installation
 
 ### Clone the repository
@@ -28,7 +46,7 @@ conda env create -f environment.yml
 conda activate epivoi
 ```
 
-The `environment.yml` describes the software environment. Install `bedtools` as well, because the TF workflows call `bedtools getfasta`. TRAP and PASTAA are external executables and must be supplied separately. FIMO and `fasta-get-markov` are MEME Suite tools and must be available in the active environment or configured by path. Check the installed tools before running TF analyses.
+The `environment.yml` describes the software environment. Install `bedtools` as well, because the TF workflows call `bedtools getfasta`. For local installation outside Docker, TRAP and PASTAA must be supplied separately. The Docker example includes these executables. FIMO and `fasta-get-markov` are MEME Suite tools and must be available in the active environment or configured by path. Check the installed tools before running TF analyses.
 
 The application sources `viz_obj_helpers.R` from the application directory. Make sure this helper file is present alongside `app.R`, because it provides the functions used to locate and read the per gene Feature Importance and epigenetic signal files.
 
@@ -163,7 +181,7 @@ The gene-wise matrices are bundled for chromosome 21, but the following resource
 | Reference genome | `EPIVOI_GENOME_FASTA` | Indexed genome FASTA consistent with the object's `genome` (`hg38` for chromosome 21), e.g. `/projects/single_cell_stitchit/work/visualization/app/local_resources/hg38.fa` |
 | TRAP binding energy matrix | `EPIVOI_PASTAA_ENERGY_MATRIX` | TRAP-compatible energy matrix with parameter header and numerical energy values, e.g. `/projects/single_cell_stitchit/work/visualization/app/tf_pastaa_output/matrices/Jaspar_Hocomoco_Kellis_human_energy.txt` |
 | MEME motif collection | `EPIVOI_MEME_MOTIF_FILE` | MEME-format TF motifs, e.g. `/projects/single_cell_stitchit/work/visualization/tf_enrichment/JASPAR2026_CORE_vertebrates_non-redundant_pfms_meme.meme` |
-| FIMO background | `EPIVOI_FIMO_ENCODE_BG` | Compatible nucleotide background-frequency file selected by the ENCODE background option |
+| FIMO background | `EPIVOI_FIMO_ENCODE_BG` | MEME-format motif resource used by the current ENCODE-mode implementation |
 | Ensembl Regulatory Build | `EPIVOI_REGULATORY_BUILD_BED` (optional) | Local BED annotation with chromosome, start and end, plus optional annotation fields |
 
 The RefSeq and FASTA coordinate system must match the object assembly. **A MEME motif database is not interchangeable with the stand-alone FIMO background file.** When a local Regulatory Build BED is not specified, the app can retrieve compatible Ensembl annotations dynamically with `biomaRt`, which requires network access.
@@ -275,7 +293,7 @@ The repository screenshot directory is [`docs/screenshots/`](docs/screenshots/).
 
 Consult the repository for the applicable license and distribution terms. Do not assume a license if none has been selected.
 
-## Gene Features in Overview
+#### Gene Features in Overview
 
 The Overview tab includes four violin plots comparing gene features
 across correlation classes (failed, low, medium and high):
