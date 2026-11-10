@@ -18,6 +18,10 @@ dependencies:
   - r-jsonlite
   - r-later
   - r-data.table
+  - r-readr
+  - r-r.utils
+  - r-matrix
+  - bioconductor-biomart
   - r-htmltools
   - r-rjson
   - bedtools

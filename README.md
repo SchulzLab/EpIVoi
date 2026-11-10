@@ -81,7 +81,7 @@ EPIVOI_PASTAA_BIN=/projects/single_cell_stitchit/work/tf_enrichment/PASTAA/PASTA
 EPIVOI_PASTAA_ENERGY_MATRIX=/projects/single_cell_stitchit/work/visualization/app/tf_pastaa_output/matrices/Jaspar_Hocomoco_Kellis_human_energy.txt
 EPIVOI_GENOME_FASTA=/projects/single_cell_stitchit/work/visualization/app/local_resources/hg38.fa
 EPIVOI_MEME_MOTIF_FILE=/projects/single_cell_stitchit/work/visualization/tf_enrichment/JASPAR2026_CORE_vertebrates_non-redundant_pfms_meme.meme
-EPIVOI_FIMO_ENCODE_BG=/path/to/compatible/fimo_background.txt
+EPIVOI_FIMO_ENCODE_BG=/path/to/compatible/motifs.meme
 EPIVOI_PASTAA_CORES=4
 ```
 
@@ -181,7 +181,7 @@ The gene-wise matrices are bundled for chromosome 21, but the following resource
 | Reference genome | `EPIVOI_GENOME_FASTA` | Indexed genome FASTA consistent with the object's `genome` (`hg38` for chromosome 21), e.g. `/projects/single_cell_stitchit/work/visualization/app/local_resources/hg38.fa` |
 | TRAP binding energy matrix | `EPIVOI_PASTAA_ENERGY_MATRIX` | TRAP-compatible energy matrix with parameter header and numerical energy values, e.g. `/projects/single_cell_stitchit/work/visualization/app/tf_pastaa_output/matrices/Jaspar_Hocomoco_Kellis_human_energy.txt` |
 | MEME motif collection | `EPIVOI_MEME_MOTIF_FILE` | MEME-format TF motifs, e.g. `/projects/single_cell_stitchit/work/visualization/tf_enrichment/JASPAR2026_CORE_vertebrates_non-redundant_pfms_meme.meme` |
-| FIMO background | `EPIVOI_FIMO_ENCODE_BG` | MEME-format motif resource used by the current ENCODE-mode implementation |
+| FIMO ENCODE motif resource | `EPIVOI_FIMO_ENCODE_BG` | MEME-format motif resource used by the current ENCODE-mode implementation |
 | Ensembl Regulatory Build | `EPIVOI_REGULATORY_BUILD_BED` (optional) | Local BED annotation with chromosome, start and end, plus optional annotation fields |
 
 The RefSeq and FASTA coordinate system must match the object assembly. **A MEME motif database is not interchangeable with the stand-alone FIMO background file.** When a local Regulatory Build BED is not specified, the app can retrieve compatible Ensembl annotations dynamically with `biomaRt`, which requires network access.
@@ -283,7 +283,7 @@ The **Help** tab provides in app explanations of the plots, analysis modes and i
 
 ## Implementation and external tools
 
-EpIVoi is implemented in R/Shiny. Locus visualization uses IGV.js with Shiny to JavaScript messaging. Regulatory annotations may be retrieved using biomaRt. TF analysis uses TRAP, PASTAA and FIMO from MEME Suite. The accompanying manuscript reports the implementation versions IGV.js 3.3.1 and FIMO/MEME Suite 5.5.7. Your locally installed software versions should be checked independently.
+EpIVoi is implemented in R/Shiny. Locus visualization uses IGV.js with Shiny to JavaScript messaging. Regulatory annotations may be retrieved using biomaRt. TF analysis uses TRAP, PASTAA and FIMO from MEME Suite. The bundled Docker example includes IGV.js 3.2.5. The installed FIMO/MEME Suite and R package versions depend on the resolved software environment and should be checked for reproducibility.
 
 ## Screenshots and further documentation
 

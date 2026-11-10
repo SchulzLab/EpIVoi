@@ -22,7 +22,7 @@ EPIVOI_PASTAA_CORES=4
 EPIVOI_FIMO_BIN=/path/to/fimo
 EPIVOI_FASTA_GET_MARKOV_BIN=/path/to/fasta-get-markov
 EPIVOI_MEME_MOTIF_FILE=/path/to/motifs.meme
-EPIVOI_FIMO_ENCODE_BG=/path/to/background.txt
+EPIVOI_FIMO_ENCODE_BG=/path/to/compatible/motifs.meme
 
 # Optional Regulatory Build BED
 # EPIVOI_REGULATORY_BUILD_BED=/path/to/regulatory_build.bed
